@@ -18,14 +18,23 @@
     };
 }
 
-<div class="d-flex flex-wrap align-items-center mb-3">
-    <div class="form-inline mb-2">
-        <label class="mr-2 font-weight-bold">Filter by date:</label>
-        <input type="date" id="dateFrom" class="form-control mr-2" title="From date" />
-        <span class="mr-2">to</span>
-        <input type="date" id="dateTo" class="form-control" title="To date" />
+<style>
+    .force-capitalize { text-transform: capitalize; }
+</style>
+
+@if (isAdmin)
+{
+    <div class="d-flex flex-wrap align-items-center mb-3">
+        <div class="form-inline mb-2">
+            <label class="mr-2 font-weight-bold">Sort by:</label>
+            <select id="sortBy" class="form-control">
+                <option value="score">Score (Highest First)</option>
+                <option value="date">Date (Oldest First)</option>
+                <option value="name">Name (A-Z)</option>
+            </select>
+        </div>
     </div>
-</div>
+}
 
 @if (!Model.Any())
 {
@@ -33,96 +42,250 @@
 }
 else
 {
-    <div class="row" id="appsCards">
-        @foreach (var item in Model)
+    // Group applications by position
+    var applicationsByPosition = Model
+        .Where(a => a.Position != null)
+        .GroupBy(a => a.Position)
+        .OrderBy(g => g.Key.Title)
+        .ToList();
+    
+    foreach (var positionGroup in applicationsByPosition)
+    {
+        var position = positionGroup.Key;
+        var positionApplications = positionGroup
+            .OrderByDescending(a => a.Score ?? 0)
+            .ThenBy(a => a.AppliedOn)
+            .ToList();
+        
+        // Safely get department name without proxy type
+        string departmentName = null;
+        if (position.Department != null)
         {
-            var badgeClass = badge(item.Status);
-            var applicantName = item.Applicant != null ? item.Applicant.FullName : "N/A";
-            var positionTitle = item.Position != null ? item.Position.Title : "N/A";
-            var hasInterview = interviewedAppIds.Contains(item.Id);
-            <div class="col-md-6 mb-3" data-status="@item.Status" data-date="@item.AppliedOn.ToString("yyyy-MM-dd")">
-                <div class="card h-100 shadow-sm">
-                    <div class="card-body d-flex flex-column">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div>
-                                <div class="h5 mb-1">@applicantName</div>
-                                <div class="text-muted">for @positionTitle</div>
-                            </div>
-                            <span class="badge badge-@badgeClass">@item.Status</span>
-                        </div>
-                        <p class="text-muted mb-2 small">Applied: @item.AppliedOn.ToShortDateString()</p>
-                        @if (!string.IsNullOrEmpty(item.ResumePath))
-                        {
-                            <p class="mb-2 small">Resume: @item.ResumePath</p>
-                        }
-                        @if (isAdmin)
-                        {
-                            <div class="mt-auto">
-                                @if (hasInterview)
-                                {
-                                    <span class="badge badge-success"><i class="fas fa-check"></i> Interview Booked</span>
-                                }
-                                else
-                                {
-                                    using (Html.BeginForm("BookInterview", "Interviews", FormMethod.Post, new { @class = "form-inline" }))
-                                    {
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="applicationId" value="@item.Id" />
-                                        <select name="interviewerId" class="form-control form-control-sm mr-1" required style="width: 100px;">
-                                            <option value="">Interviewer</option>
-                                            @if (interviewers != null)
-                                            {
-                                                foreach (var i in interviewers)
-                                                {
-                                                    <option value="@i.Id">@i.UserName</option>
-                                                }
-                                            }
-                                        </select>
-                                        <input type="datetime-local" name="scheduledAt" class="form-control form-control-sm mr-1" required value="@DateTime.Now.AddDays(1).ToString("yyyy-MM-ddTHH:mm")" style="width: 170px;" />
-                                        <select name="mode" class="form-control form-control-sm mr-1" required style="width: 85px;">
-                                            <option value="Remote">Remote</option>
-                                            <option value="Onsite">Onsite</option>
-                                        </select>
-                                        <button type="submit" class="btn btn-sm btn-success"><i class="fas fa-calendar-check"></i> Book</button>
-                                    }
-                                }
-                            </div>
-                        }
-                    </div>
-                </div>
-            </div>
+            var deptType = position.Department.GetType();
+            if (deptType.Name.StartsWith("Department_") || deptType.FullName.Contains("DynamicProxies"))
+            {
+                // It's a proxy, get the actual Department
+                var deptProp = deptType.GetProperty("Name");
+                if (deptProp != null)
+                {
+                    departmentName = deptProp.GetValue(position.Department) as string;
+                }
+            }
+            else
+            {
+                departmentName = position.Department.Name;
+            }
         }
-    </div>
+        
+        <text>
+        <div class="mb-5" style="border: 2px solid #6fb8dc; border-radius: 8px; padding: 1.5rem; background: linear-gradient(to bottom, #f0f7ff 0%, #ffffff 100%); box-shadow: 0 2px 8px rgba(111, 184, 220, 0.15);">
+            <div class="mb-3" style="border-bottom: 3px solid #6fb8dc; padding-bottom: 1rem;">
+                <h3 class="mb-2" style="color: #0d2c4a; font-weight: 700; font-size: 1.5rem;">
+                    @position.Title
+                </h3>
+                @if (!string.IsNullOrEmpty(departmentName))
+                {
+                    <div class="mb-2">
+                        <span class="badge badge-secondary" style="font-size: 0.9rem; padding: 0.4rem 0.8rem;">
+                            <i class="fas fa-building"></i> @departmentName
+                        </span>
+                        <span class="badge badge-info ml-2" style="font-size: 0.9rem; padding: 0.4rem 0.8rem;">
+                            <i class="fas fa-users"></i> @positionApplications.Count applicant@(positionApplications.Count != 1 ? "s" : "")
+                        </span>
+                    </div>
+                }
+                else
+                {
+                    <div class="mb-2">
+                        <span class="badge badge-info" style="font-size: 0.9rem; padding: 0.4rem 0.8rem;">
+                            <i class="fas fa-users"></i> @positionApplications.Count applicant@(positionApplications.Count != 1 ? "s" : "")
+                        </span>
+                    </div>
+                }
+            </div>
+            
+            <div class="row" id="appsCards-@position.Id" data-position-id="@position.Id">
+                @{ int rank = 1; }
+                @foreach (var item in positionApplications)
+                {
+                    var badgeClass = badge(item.Status);
+                    var applicantName = item.Applicant != null ? item.Applicant.FullName : "N/A";
+                    var positionTitle = item.Position != null ? item.Position.Title : "N/A";
+                    var hasInterview = interviewedAppIds.Contains(item.Id);
+                    var score = item.Score ?? 0;
+                    var scoreColor = score >= 80 ? "success" : score >= 65 ? "info" : score >= 50 ? "warning" : "secondary";
+                    <div class="col-md-6 mb-3" data-status="@item.Status" data-date="@item.AppliedOn.ToString("yyyy-MM-dd")" data-score="@score">
+                        <div class="card h-100 shadow-sm">
+                            <div class="card-body d-flex flex-column">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        <div class="d-flex align-items-center">
+                                            @if (isAdmin && item.Score.HasValue)
+                                            {
+                                                <span class="badge badge-primary mr-2">#@rank</span>
+                                            }
+                                            <div class="h5 mb-0 force-capitalize">@applicantName</div>
+                                        </div>
+                                        <div class="text-muted">for @positionTitle</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="badge badge-@badgeClass">@item.Status</span>
+                                        @if (isAdmin && item.Score.HasValue)
+                                        {
+                                            <div class="mt-1">
+                                                <span class="badge badge-@scoreColor">Score: @item.Score.Value.ToString("F1")</span>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                                @if (isAdmin && !string.IsNullOrWhiteSpace(item.ScoreReason))
+                                {
+                                    <p class="text-muted mb-2 small"><em>@item.ScoreReason</em></p>
+                                }
+                                <p class="text-muted mb-2 small">Applied: @item.AppliedOn.ToShortDateString()</p>
+                                @if (!string.IsNullOrEmpty(item.ResumePath))
+                                {
+                                    <p class="mb-2 small">Resume: @item.ResumePath</p>
+                                }
+                                @if (isAdmin)
+                                {
+                                    <div class="mt-auto">
+                                        @if (hasInterview)
+                                        {
+                                            <span class="badge badge-success"><i class="fas fa-check"></i> Interview Booked</span>
+                                        }
+                                        else
+                                        {
+                                            using (Html.BeginForm("BookInterview", "Interviews", FormMethod.Post, new { @class = "form-inline" }))
+                                            {
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="applicationId" value="@item.Id" />
+                                                <select name="interviewerId" class="form-control form-control-sm mr-1" required style="width: 100px;">
+                                                    <option value="">Interviewer</option>
+                                                    @if (interviewers != null)
+                                                    {
+                                                        foreach (var i in interviewers)
+                                                        {
+                                                            <option value="@i.Id">@i.UserName</option>
+                                                        }
+                                                    }
+                                                </select>
+                                                <input type="datetime-local" name="scheduledAt" class="form-control form-control-sm mr-1" required value="@DateTime.Now.AddDays(1).ToString("yyyy-MM-ddTHH:mm")" style="width: 170px;" />
+                                                <select name="mode" class="form-control form-control-sm mr-1" required style="width: 85px;">
+                                                    <option value="Remote">Remote</option>
+                                                    <option value="Onsite">Onsite</option>
+                                                </select>
+                                                <button type="submit" class="btn btn-sm btn-success"><i class="fas fa-calendar-check"></i> Book</button>
+                                            }
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    rank++;
+                }
+            </div>
+        </div>
+        </text>
+    }
+    
+    if (Model.Any(a => a.Position == null))
+    {
+        <text>
+        <div class="mb-4">
+            <h4 class="mb-3" style="color: #0d2c4a; border-bottom: 2px solid #6fb8dc; padding-bottom: 0.5rem;">
+                Other Applications
+            </h4>
+            <div class="row" id="appsCards-other">
+                @foreach (var item in Model.Where(a => a.Position == null))
+                {
+                    var badgeClass = badge(item.Status);
+                    var applicantName = item.Applicant != null ? item.Applicant.FullName : "N/A";
+                    var hasInterview = interviewedAppIds.Contains(item.Id);
+                    var score = item.Score ?? 0;
+                    var scoreColor = score >= 80 ? "success" : score >= 65 ? "info" : score >= 50 ? "warning" : "secondary";
+                    <div class="col-md-6 mb-3" data-status="@item.Status" data-date="@item.AppliedOn.ToString("yyyy-MM-dd")" data-score="@score">
+                        <div class="card h-100 shadow-sm">
+                            <div class="card-body d-flex flex-column">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        <div class="h5 mb-0">@applicantName</div>
+                                        <div class="text-muted">Position not specified</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="badge badge-@badgeClass">@item.Status</span>
+                                        @if (isAdmin && item.Score.HasValue)
+                                        {
+                                            <div class="mt-1">
+                                                <span class="badge badge-@scoreColor">Score: @item.Score.Value.ToString("F1")</span>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                                <p class="text-muted mb-2 small">Applied: @item.AppliedOn.ToShortDateString()</p>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+        </text>
+    }
 }
 
 @section Scripts {
 <script>
     (function () {
-        var dateFrom = document.getElementById('dateFrom');
-        var dateTo = document.getElementById('dateTo');
-        var cards = document.querySelectorAll('#appsCards [data-date]');
-        
-        function applyFilters() {
-            var fromVal = dateFrom.value;
-            var toVal = dateTo.value;
+        var sortBy = document.getElementById('sortBy');
+        // Get all card containers (one per position)
+        var cardsContainers = Array.from(document.querySelectorAll('[id^="appsCards-"]'));
+        var cards = Array.from(document.querySelectorAll('[id^="appsCards-"] [data-date]'));
+
+        function sortCards() {
+            if (!sortBy) return;
             
-            cards.forEach(function (c) {
-                var cardDate = c.getAttribute('data-date');
-                var dateMatch = true;
+            var sortValue = sortBy.value;
+            
+            // Sort within each position group
+            cardsContainers.forEach(function(container) {
+                var positionCards = Array.from(container.querySelectorAll('[data-date]'));
+                var visibleCards = positionCards.filter(function(c) { return c.style.display !== 'none'; });
                 
-                if (fromVal && cardDate < fromVal) {
-                    dateMatch = false;
-                }
-                if (toVal && cardDate > toVal) {
-                    dateMatch = false;
-                }
+                visibleCards.sort(function(a, b) {
+                    if (sortValue === 'score') {
+                        var scoreA = parseFloat(a.getAttribute('data-score') || '0');
+                        var scoreB = parseFloat(b.getAttribute('data-score') || '0');
+                        return scoreB - scoreA; // Descending
+                } else if (sortValue === 'date') {
+                    var dateA = a.getAttribute('data-date');
+                    var dateB = b.getAttribute('data-date');
+                    return dateA.localeCompare(dateB); // Ascending (oldest first)
+                    } else if (sortValue === 'name') {
+                        var nameA = a.querySelector('.h5').textContent.trim();
+                        var nameB = b.querySelector('.h5').textContent.trim();
+                        return nameA.localeCompare(nameB);
+                    }
+                    return 0;
+                });
                 
-                c.style.display = dateMatch ? '' : 'none';
+                // Reorder in DOM within this position group
+                visibleCards.forEach(function(card) {
+                    container.appendChild(card);
+                });
+                
+                // Update rank badges within this position group
+                var rank = 1;
+                visibleCards.forEach(function(card) {
+                    var badge = card.querySelector('.badge-primary');
+                    if (badge && sortValue === 'score') {
+                        badge.textContent = '#' + rank++;
+                    }
+                });
             });
         }
         
-        dateFrom.addEventListener('change', applyFilters);
-        dateTo.addEventListener('change', applyFilters);
+        if (sortBy) sortBy.addEventListener('change', sortCards);
     })();
 </script>
 }

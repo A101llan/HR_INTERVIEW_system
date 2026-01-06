@@ -129,6 +129,14 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult DeleteConfirmed(int id)
         {
+            // Do not delete if applicant still has applications (FK constraint)
+            var hasApplications = _uow.Applications.GetAll().Any(a => a.ApplicantId == id);
+            if (hasApplications)
+            {
+                TempData["DeleteError"] = "Cannot delete applicant because applications still exist. Delete or reassign those applications first.";
+                return RedirectToAction("Details", new { id });
+            }
+
             var item = _uow.Applicants.Get(id);
             if (item == null)
             {
