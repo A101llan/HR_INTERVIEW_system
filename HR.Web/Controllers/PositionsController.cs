@@ -16,28 +16,6 @@ namespace HR.Web.Controllers
         {
             var positions = _uow.Positions.GetAll(p => p.Department)
                 .OrderByDescending(p => p.PostedOn);
-            
-            // Check which positions the current user has already applied for
-            var appliedPositionIds = new System.Collections.Generic.HashSet<int>();
-            if (User != null && User.Identity != null && User.Identity.IsAuthenticated)
-            {
-                var user = _uow.Users.GetAll().FirstOrDefault(u => u.UserName == User.Identity.Name);
-                if (user != null)
-                {
-                    var applicant = _uow.Applicants.GetAll().FirstOrDefault(a => a.Email == user.Email);
-                    if (applicant != null)
-                    {
-                        appliedPositionIds = new System.Collections.Generic.HashSet<int>(
-                            _uow.Applications.GetAll()
-                                .Where(a => a.ApplicantId == applicant.Id)
-                                .Select(a => a.PositionId)
-                                .ToList()
-                        );
-                    }
-                }
-            }
-            ViewBag.AppliedPositionIds = appliedPositionIds;
-            
             return View(positions);
         }
 
@@ -56,12 +34,12 @@ namespace HR.Web.Controllers
         public ActionResult Create()
         {
             ViewBag.DepartmentId = new SelectList(_uow.Departments.GetAll(), "Id", "Name");
-            ViewBag.QuestionList = _uow.Questions.GetAll().Where(q => q.IsActive).ToList();
+            // Load all questions (not just active ones) so admin can see all available questions
+            ViewBag.QuestionList = _uow.Questions.GetAll().ToList();
             return View(new Position
             {
                 IsOpen = true,
-                PostedOn = DateTime.UtcNow,
-                Currency = "KES"
+                PostedOn = DateTime.UtcNow
             });
         }
 
@@ -71,7 +49,7 @@ namespace HR.Web.Controllers
         public ActionResult Create(Position model, int[] selectedQuestions)
         {
             Debug.WriteLine("[PositionsController.Create][POST] Entered at " + DateTime.UtcNow);
-            Debug.WriteLine(string.Format("Title='{0}', DeptId={1}, IsOpen={2}", model != null ? model.Title : null, model != null ? (object)model.DepartmentId : null, model != null ? (object)model.IsOpen : null));
+            Debug.WriteLine($"Title='{model?.Title}', DeptId={model?.DepartmentId}, IsOpen={model?.IsOpen}");
             Debug.WriteLine("ModelState.IsValid = " + ModelState.IsValid);
 
             // ensure a department was selected (DropDownList optionLabel posts empty -> 0)
@@ -86,7 +64,7 @@ namespace HR.Web.Controllers
                 {
                     foreach (var err in kvp.Value.Errors)
                     {
-                    Debug.WriteLine(string.Format("[PositionsController.Create][ModelError] Key='{0}', Error='{1}', Exception='{2}'", kvp.Key, err.ErrorMessage, err.Exception != null ? err.Exception.Message : null));
+                        Debug.WriteLine($"[PositionsController.Create][ModelError] Key='{kvp.Key}', Error='{err.ErrorMessage}', Exception='{err.Exception?.Message}'");
                     }
                 }
                 ViewBag.DepartmentId = new SelectList(_uow.Departments.GetAll(), "Id", "Name", model.DepartmentId);
@@ -96,11 +74,6 @@ namespace HR.Web.Controllers
             }
 
             model.PostedOn = DateTime.UtcNow;
-            // Set default currency to KES if not provided
-            if (string.IsNullOrEmpty(model.Currency))
-            {
-                model.Currency = "KES";
-            }
             try
             {
                 Debug.WriteLine("[PositionsController.Create][POST] Adding position to UoW and saving...");
@@ -145,28 +118,41 @@ namespace HR.Web.Controllers
         [Authorize(Roles = "Admin")]
         public ActionResult Edit(int id)
         {
-            var position = _uow.Positions.Get(id);
+            var position = _uow.Positions.GetAll(p => p.PositionQuestions).FirstOrDefault(p => p.Id == id);
             if (position == null)
             {
                 return HttpNotFound();
             }
 
             ViewBag.DepartmentId = new SelectList(_uow.Departments.GetAll(), "Id", "Name", position.DepartmentId);
+            
+            // Load all questions (include inactive ones too so admin can see everything)
+            var allQuestions = _uow.Questions.GetAll().ToList();
+            ViewBag.QuestionList = allQuestions;
+            Debug.WriteLine($"[PositionsController.Edit] Loaded {allQuestions.Count} questions from database.");
+            
+            // Get currently selected question IDs for pre-checking
+            var selectedQuestionIds = position.PositionQuestions?.Select(pq => pq.QuestionId).ToList() ?? new System.Collections.Generic.List<int>();
+            ViewBag.SelectedQuestionIds = selectedQuestionIds;
+            
             return View(position);
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
         [Authorize(Roles = "Admin")]
-        public ActionResult Edit(Position model)
+        public ActionResult Edit(Position model, int[] selectedQuestions)
         {
             Debug.WriteLine("[PositionsController.Edit][POST] Entered at " + DateTime.UtcNow);
-            Debug.WriteLine(string.Format("Title='{0}', DeptId={1}, IsOpen={2}", model != null ? model.Title : null, model != null ? (object)model.DepartmentId : null, model != null ? (object)model.IsOpen : null));
+            Debug.WriteLine($"Title='{model?.Title}', DeptId={model?.DepartmentId}, IsOpen={model?.IsOpen}");
             Debug.WriteLine("ModelState.IsValid = " + ModelState.IsValid);
 
             if (!ModelState.IsValid)
             {
                 ViewBag.DepartmentId = new SelectList(_uow.Departments.GetAll(), "Id", "Name", model.DepartmentId);
+                ViewBag.QuestionList = _uow.Questions.GetAll().Where(q => q.IsActive).ToList();
+                var selectedQuestionIds = selectedQuestions != null ? selectedQuestions.ToList() : new System.Collections.Generic.List<int>();
+                ViewBag.SelectedQuestionIds = selectedQuestionIds;
                 Debug.WriteLine("[PositionsController.Edit][POST] Returning view due to invalid ModelState.");
                 return View(model);
             }
@@ -176,6 +162,9 @@ namespace HR.Web.Controllers
             {
                 ModelState.AddModelError("DepartmentId", "Please select a department.");
                 ViewBag.DepartmentId = new SelectList(_uow.Departments.GetAll(), "Id", "Name", model.DepartmentId);
+                ViewBag.QuestionList = _uow.Questions.GetAll().Where(q => q.IsActive).ToList();
+                var selectedQuestionIds = selectedQuestions != null ? selectedQuestions.ToList() : new System.Collections.Generic.List<int>();
+                ViewBag.SelectedQuestionIds = selectedQuestionIds;
                 return View(model);
             }
 
@@ -186,19 +175,6 @@ namespace HR.Web.Controllers
                 if (existingPosition == null)
                 {
                     return HttpNotFound();
-                }
-
-                // Preserve the original PostedOn value (SQL Server datetime range: 1753-01-01 to 9999-12-31)
-                // Ensure PostedOn is always within valid SQL Server datetime range
-                var originalPostedOn = existingPosition.PostedOn;
-                var minDateTime = new DateTime(1753, 1, 1);
-                var maxDateTime = new DateTime(9999, 12, 31, 23, 59, 59);
-                
-                if (originalPostedOn < minDateTime || originalPostedOn > maxDateTime)
-                {
-                    // If PostedOn is invalid, set it to current UTC time
-                    originalPostedOn = DateTime.UtcNow;
-                    Debug.WriteLine(string.Format("[PositionsController.Edit][POST] PostedOn was invalid ({0}), setting to {1}", existingPosition.PostedOn, originalPostedOn));
                 }
 
                 // Update the fields from the model
@@ -219,21 +195,51 @@ namespace HR.Web.Controllers
                 {
                     existingPosition.Currency = "KES";
                 }
-                
-                // Ensure PostedOn is set to a valid value before saving
-                existingPosition.PostedOn = originalPostedOn;
-                
-                // Double-check PostedOn is valid before saving
-                if (existingPosition.PostedOn < minDateTime || existingPosition.PostedOn > maxDateTime)
-                {
-                    existingPosition.PostedOn = DateTime.UtcNow;
-                    Debug.WriteLine($"[PositionsController.Edit][POST] PostedOn validation failed, resetting to {existingPosition.PostedOn}");
-                }
 
-                Debug.WriteLine(string.Format("[PositionsController.Edit][POST] Updating position with PostedOn={0}", existingPosition.PostedOn));
+                Debug.WriteLine("[PositionsController.Edit][POST] Updating position and saving...");
                 _uow.Positions.Update(existingPosition);
                 _uow.Complete();
                 Debug.WriteLine("[PositionsController.Edit][POST] Save succeeded.");
+
+                // Update selected questions for this position
+                // First, get existing PositionQuestions
+                var existingPositionQuestions = _uow.PositionQuestions.GetAll()
+                    .Where(pq => pq.PositionId == model.Id)
+                    .ToList();
+
+                // Get selected question IDs (empty array if none selected)
+                var selectedQuestionIds = selectedQuestions != null ? selectedQuestions.ToList() : new System.Collections.Generic.List<int>();
+
+                // Remove PositionQuestions that are no longer selected
+                foreach (var existingPq in existingPositionQuestions)
+                {
+                    if (!selectedQuestionIds.Contains(existingPq.QuestionId))
+                    {
+                        _uow.PositionQuestions.Remove(existingPq);
+                    }
+                }
+
+                // Get currently assigned question IDs
+                var currentlyAssignedQuestionIds = existingPositionQuestions.Select(pq => pq.QuestionId).ToList();
+
+                // Add new PositionQuestions for newly selected questions
+                int maxOrder = existingPositionQuestions.Any() ? existingPositionQuestions.Max(pq => pq.Order) : 0;
+                foreach (var questionId in selectedQuestionIds)
+                {
+                    if (!currentlyAssignedQuestionIds.Contains(questionId))
+                    {
+                        var newPq = new PositionQuestion
+                        {
+                            PositionId = model.Id,
+                            QuestionId = questionId,
+                            Order = ++maxOrder
+                        };
+                        _uow.PositionQuestions.Add(newPq);
+                    }
+                }
+
+                _uow.Complete();
+                Debug.WriteLine("[PositionsController.Edit][POST] Updated position questions.");
             }
             catch (Exception ex)
             {
@@ -241,6 +247,9 @@ namespace HR.Web.Controllers
                 var msg = ex.GetBaseException()?.Message ?? ex.Message;
                 ModelState.AddModelError("", "Unable to save position: " + msg);
                 ViewBag.DepartmentId = new SelectList(_uow.Departments.GetAll(), "Id", "Name", model.DepartmentId);
+                ViewBag.QuestionList = _uow.Questions.GetAll().Where(q => q.IsActive).ToList();
+                var selectedQuestionIds = selectedQuestions != null ? selectedQuestions.ToList() : new System.Collections.Generic.List<int>();
+                ViewBag.SelectedQuestionIds = selectedQuestionIds;
                 Debug.WriteLine("[PositionsController.Edit][POST] Returning view due to exception.");
                 return View(model);
             }

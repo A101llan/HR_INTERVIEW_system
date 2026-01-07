@@ -66,6 +66,9 @@
                 {
                     <li class="nav-item @(ViewContext.RouteData.Values["controller"].ToString() == "Onboardings" ? "active" : "")"><a class="nav-link" href="@Url.Action("Index","Onboardings")"><i class="fas fa-user-check"></i> Onboardings</a></li>
                     <li class="nav-item @(ViewContext.RouteData.Values["controller"].ToString() == "Applicants" ? "active" : "")"><a class="nav-link" href="@Url.Action("Index","Applicants")"><i class="fas fa-users"></i> Applicants</a></li>
+                    <li class="nav-item @(ViewContext.RouteData.Values["controller"].ToString() == "Admin" && ViewContext.RouteData.Values["action"].ToString() == "Questions" ? "active" : "")">
+                        <a class="nav-link" href="@Url.Action("Questions","Admin")"><i class="fas fa-question-circle"></i> Questions</a>
+                    </li>
                 }
                 <li class="nav-item @(ViewContext.RouteData.Values["controller"].ToString() == "Departments" ? "active" : "")"><a class="nav-link" href="@Url.Action("Index","Departments")"><i class="fas fa-building"></i> Departments</a></li>
             </ul>

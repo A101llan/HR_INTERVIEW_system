@@ -18,6 +18,9 @@ namespace HR.Web.Data
         public Repository<PositionQuestion> PositionQuestions { get { return new Repository<PositionQuestion>(_context); } }
         public Repository<ApplicationAnswer> ApplicationAnswers { get { return new Repository<ApplicationAnswer>(_context); } }
 
+        // Expose the underlying context for advanced queries (e.g., Question options)
+        public HrContext Context { get { return _context; } }
+
         public int Complete()
         {
             return _context.SaveChanges();

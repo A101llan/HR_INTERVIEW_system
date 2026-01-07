@@ -159,7 +159,9 @@
     <Compile Include="Models\Interview.cs" />
     <Compile Include="Models\Onboarding.cs" />
     <Compile Include="Models\Question.cs" />
+    <Compile Include="Models\QuestionOption.cs" />
     <Compile Include="Models\PositionQuestion.cs" />
+    <Compile Include="Models\PositionQuestionOption.cs" />
     <Compile Include="Models\ApplicationAnswer.cs" />
     <Compile Include="Models\ApplicationReviewViewModel.cs" />
     <Compile Include="Data\HrContext.cs" />

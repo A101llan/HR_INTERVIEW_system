@@ -20,6 +20,7 @@ namespace HR.Web.Data
         public DbSet<Onboarding> Onboardings { get; set; }
 
         public DbSet<Question> Questions { get; set; }
+        public DbSet<QuestionOption> QuestionOptions { get; set; }
         public DbSet<PositionQuestion> PositionQuestions { get; set; }
         public DbSet<ApplicationAnswer> ApplicationAnswers { get; set; }
 
@@ -57,6 +58,44 @@ namespace HR.Web.Data
                 .HasRequired(o => o.Application)
                 .WithMany()
                 .HasForeignKey(o => o.ApplicationId)
+                .WillCascadeOnDelete(false);
+
+            // PositionQuestion relationships (disable cascade to prevent multiple cascade paths)
+            modelBuilder.Entity<PositionQuestion>()
+                .HasRequired(pq => pq.Position)
+                .WithMany(p => p.PositionQuestions)
+                .HasForeignKey(pq => pq.PositionId)
+                .WillCascadeOnDelete(false);
+
+            modelBuilder.Entity<PositionQuestion>()
+                .HasRequired(pq => pq.Question)
+                .WithMany(q => q.PositionQuestions)
+                .HasForeignKey(pq => pq.QuestionId)
+                .WillCascadeOnDelete(false);
+
+            // Prevent multiple cascade path issues around questionnaire options
+            modelBuilder.Entity<QuestionOption>()
+                .HasRequired(qo => qo.Question)
+                .WithMany() // keep inverse null to avoid mismatched nav; no cascade
+                .HasForeignKey(qo => qo.QuestionId)
+                .WillCascadeOnDelete(false);
+
+            modelBuilder.Entity<QuestionOption>()
+                .HasMany(qo => qo.PositionQuestionOptions)
+                .WithRequired(pqo => pqo.QuestionOption)
+                .HasForeignKey(pqo => pqo.QuestionOptionId)
+                .WillCascadeOnDelete(false);
+
+            modelBuilder.Entity<PositionQuestionOption>()
+                .HasRequired(pqo => pqo.PositionQuestion)
+                .WithMany()
+                .HasForeignKey(pqo => pqo.PositionQuestionId)
+                .WillCascadeOnDelete(false);
+
+            modelBuilder.Entity<PositionQuestionOption>()
+                .HasRequired(pqo => pqo.QuestionOption)
+                .WithMany(qo => qo.PositionQuestionOptions)
+                .HasForeignKey(pqo => pqo.QuestionOptionId)
                 .WillCascadeOnDelete(false);
         }
     }

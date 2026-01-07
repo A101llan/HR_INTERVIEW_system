@@ -213,5 +213,133 @@ namespace HR.Web.Controllers
          *    - Application trends
          *    - Candidate pool quality metrics
          */
+        // Questions management (CRUD)
+        [Authorize(Roles = "Admin")]
+        public ActionResult Questions()
+        {
+            var questions = _uow.Questions.GetAll().ToList();
+            var options = _uow.Context.Set<QuestionOption>().ToList();
+            var list = questions
+                .Select(q => new QuestionAdminViewModel
+                {
+                    Id = q.Id,
+                    Text = q.Text,
+                    Type = q.Type,
+                    IsActive = q.IsActive,
+                    Options = options.Where(o => o.QuestionId == q.Id)
+                        .Select(o => new QuestionOptionVM
+                        {
+                            Id = o.Id,
+                            Text = o.Text,
+                            Points = o.Points
+                        }).ToList()
+                }).ToList();
+            return View(list);
+        }
+
+        [Authorize(Roles = "Admin")]
+        public ActionResult EditQuestion(int? id)
+        {
+            if (id == null)
+            {
+                return View(new QuestionAdminViewModel { IsActive = true });
+            }
+            var q = _uow.Questions.GetAll().FirstOrDefault(x => x.Id == id.Value);
+            if (q == null)
+                return HttpNotFound();
+            var options = _uow.Context.Set<QuestionOption>().Where(o => o.QuestionId == q.Id).ToList();
+            var vm = new QuestionAdminViewModel
+            {
+                Id = q.Id,
+                Text = q.Text,
+                Type = q.Type,
+                IsActive = q.IsActive,
+                Options = options.Select(o => new QuestionOptionVM
+                {
+                    Id = o.Id,
+                    Text = o.Text,
+                    Points = o.Points
+                }).ToList()
+            };
+            return View(vm);
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Admin")]
+        [ValidateAntiForgeryToken]
+        public ActionResult EditQuestion(QuestionAdminViewModel model)
+        {
+            if (!ModelState.IsValid)
+                return View(model);
+
+            Question q;
+            if (model.Id.HasValue)
+            {
+                // update existing
+                q = _uow.Questions.Get(model.Id.Value);
+                if (q == null) return HttpNotFound();
+                q.Text = model.Text;
+                q.Type = model.Type;
+                q.IsActive = model.IsActive;
+                _uow.Questions.Update(q);
+                // Remove old options
+                var oldOptions = _uow.Context.Set<QuestionOption>().Where(o => o.QuestionId == q.Id);
+                _uow.Context.Set<QuestionOption>().RemoveRange(oldOptions);
+            }
+            else
+            {
+                // create new
+                q = new Question
+                {
+                    Text = model.Text,
+                    Type = model.Type,
+                    IsActive = model.IsActive
+                };
+                _uow.Questions.Add(q);
+                _uow.Complete();
+            }
+            _uow.Complete(); // Save question so it exists for option linking
+
+            // Add options (allowed for any question type)
+            if (model.Options != null)
+            {
+                foreach (var opt in model.Options)
+                {
+                    if (!string.IsNullOrWhiteSpace(opt.Text))
+                    {
+                        var newOpt = new QuestionOption
+                        {
+                            QuestionId = q.Id,
+                            Text = opt.Text,
+                            Points = opt.Points
+                        };
+                        _uow.Context.Set<QuestionOption>().Add(newOpt);
+                    }
+                }
+            }
+            _uow.Complete();
+            TempData["Message"] = "Question saved.";
+            return RedirectToAction("Questions");
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Admin")]
+        [ValidateAntiForgeryToken]
+        public ActionResult DeleteQuestion(int id)
+        {
+            var q = _uow.Questions.Get(id);
+            if (q == null) return HttpNotFound();
+            var options = _uow.Context.Set<QuestionOption>().Where(o => o.QuestionId == id);
+            _uow.Context.Set<QuestionOption>().RemoveRange(options);
+            _uow.Questions.Remove(q);
+            _uow.Complete();
+            TempData["Message"] = "Question deleted.";
+            return RedirectToAction("Questions");
+        }
+        public ActionResult TestQuestions()
+        {
+            // Return a simple response to verify routing works without a view dependency
+            return Content("Test Works");
+        }
     }
 }

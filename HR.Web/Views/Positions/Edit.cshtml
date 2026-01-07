@@ -117,6 +117,7 @@
         <div class="card-body card-body-blue">
 @{
     var questions = ViewBag.QuestionList as IEnumerable<HR.Web.Models.Question>;
+    var selectedQuestionIds = ViewBag.SelectedQuestionIds as List<int> ?? new List<int>();
     Html.EnableClientValidation(false);
     Html.EnableUnobtrusiveJavaScript(false);
     var responsibilitiesProp = typeof(HR.Web.Models.Position).GetProperty("Responsibilities");
@@ -221,23 +222,30 @@
                 </div>
 
                 @* Dynamic question selection inside the form *@
-                if (questions != null && questions.Any())
-                {
-                    <hr />
-                    <div class="form-group mb-3">
-                        <label class="font-weight-bold">Additional questionnaire questions</label>
-                        <small class="form-text text-muted mb-2">
-                            Select which reusable questions should appear for applicants of this position.
-                        </small>
-                        @foreach (var q in questions)
+                <hr />
+                <div class="form-group mb-3">
+                    <label class="font-weight-bold">Questionnaire questions</label>
+                    <small class="form-text text-muted mb-2">
+                        Select which reusable questions should appear for applicants of this position.
+                    </small>
+                    @if (questions != null && questions.Any())
+                    {
+                        foreach (var q in questions)
                         {
+                            bool isChecked = selectedQuestionIds.Contains(q.Id);
                             <div class="form-check text-left" style="max-width: 350px; margin: 0 auto;">
-                                <input class="form-check-input" type="checkbox" name="selectedQuestions" value="@q.Id" id="q_@q.Id" />
+                                <input class="form-check-input" type="checkbox" name="selectedQuestions" value="@q.Id" id="q_@q.Id" @(isChecked ? "checked" : "") />
                                 <label class="form-check-label" for="q_@q.Id">@q.Text</label>
                             </div>
                         }
-                    </div>
-                }
+                    }
+                    else
+                    {
+                        <div class="alert alert-info" style="max-width: 350px; margin: 0 auto;">
+                            No questions available. Please create questions in the Admin section first.
+                        </div>
+                    }
+                </div>
 
                 <div class="d-flex justify-content-center gap-2 mt-4">
                     <button type="submit" class="btn btn-blue px-4">Save</button>
@@ -305,7 +313,7 @@
         var min = document.getElementById('salaryMin').value;
         var max = document.getElementById('salaryMax').value;
         var currencySelect = document.getElementById('currencySelect');
-        var currency = currencySelect ? currencySelect.value : 'USD';
+        var currency = currencySelect ? currencySelect.value : 'KES';
         
         if (!min || !max) {
             document.getElementById('salaryRangeDisplay').textContent = 'Please enter salary range';
@@ -341,32 +349,3 @@
     });
 </script>
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
