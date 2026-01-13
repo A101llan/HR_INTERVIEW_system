@@ -15,5 +15,9 @@ namespace HR.Web.Models
 
         [Required, DataType(DataType.Password)]
         public string Password { get; set; }
+
+        [StringLength(20)]
+        [Display(Name = "Phone Number")]
+        public string Phone { get; set; }
     }
 }

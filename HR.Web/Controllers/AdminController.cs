@@ -14,7 +14,7 @@ namespace HR.Web.Controllers
     /// Allows admins to view candidates ranked by position, filter, and manage applications
     /// </summary>
     [Authorize(Roles = "Admin,HR")]
-    public class AdminController : Controller
+    public partial class AdminController : Controller
     {
         private readonly UnitOfWork _uow = new UnitOfWork();
 
@@ -234,7 +234,10 @@ namespace HR.Web.Controllers
                             Points = o.Points
                         }).ToList()
                 }).ToList();
-            return View(list);
+            // Ensure positions are available for consolidated AI generation modal
+            ViewBag.Positions = _uow.Positions.GetAll().ToList();
+            // Use the combined AI-enhanced questions view
+            return View("QuestionsWithMCP", list);
         }
 
         [Authorize(Roles = "Admin")]
@@ -275,14 +278,12 @@ namespace HR.Web.Controllers
             Question q;
             if (model.Id.HasValue)
             {
-                // update existing
                 q = _uow.Questions.Get(model.Id.Value);
                 if (q == null) return HttpNotFound();
                 q.Text = model.Text;
                 q.Type = model.Type;
                 q.IsActive = model.IsActive;
                 _uow.Questions.Update(q);
-                // Remove old options
                 var oldOptions = _uow.Context.Set<QuestionOption>().Where(o => o.QuestionId == q.Id);
                 _uow.Context.Set<QuestionOption>().RemoveRange(oldOptions);
             }

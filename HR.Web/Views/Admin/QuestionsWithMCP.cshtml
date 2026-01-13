@@ -1,0 +1,709 @@
+@model List<HR.Web.Models.QuestionAdminViewModel>
+@{
+    ViewBag.Title = "Manage Questions (MCP Enhanced)";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Questions</h2>
+        <div>
+            <button class="btn btn-outline-primary" onclick="$('#addQuestionChoiceModal').modal('show');">
+                Add Question
+            </button>
+        </div>
+    </div>
+    
+    <!-- MCP Status -->
+    <div id="mcpStatus" class="alert alert-info">
+        <strong>Checking MCP Connection...</strong>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>Quick Actions</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <button id="validateAll" class="btn btn-outline-warning btn-block">
+                        Validate All Questions
+                    </button>
+                </div>
+                <div class="col-md-4">
+                    <button id="optimizePoints" class="btn btn-outline-info btn-block">
+                        Optimize Point Values
+                    </button>
+                </div>
+                <div class="col-md-4">
+                    <button id="exportQuestions" class="btn btn-outline-secondary btn-block">
+                        Export Question Bank
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    @if (TempData["Message"] != null) {
+        <div class="alert alert-success">@TempData["Message"]</div>
+    }
+    
+    <!-- Filters and Search -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <input type="text" id="searchQuestions" class="form-control" placeholder="Search questions...">
+                </div>
+                <div class="col-md-3">
+                    <select id="filterType" class="form-control">
+                        <option value="">All Types</option>
+                        <option value="Text">Text</option>
+                        <option value="Choice">Choice</option>
+                        <option value="Number">Number</option>
+                        <option value="Rating">Rating</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select id="filterStatus" class="form-control">
+                        <option value="">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button id="clearFilters" class="btn btn-outline-secondary btn-block">Clear</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Questions Table -->
+    <div class="card">
+        <div class="card-header">
+            <h5>Questions (@Model.Count)</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped" id="questionsTable">
+                    <thead>
+                        <tr>
+                            <th>Question</th>
+                            <th>Type</th>
+                            <th>Options</th>
+                            <th>Status</th>
+                            <th>Quality Score</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var q in Model) {
+                            <tr data-question-id="@q.Id" data-question-text="@q.Text" data-question-type="@q.Type">
+                                <td>
+                                    <strong>@q.Text</strong>
+                                    <br/>
+                                    <small class="text-muted">ID: @q.Id</small>
+                                </td>
+                                <td>
+                                    <span class="badge badge-info">@q.Type</span>
+                                </td>
+                                <td>
+                                    <div class="options-preview">
+                                        @if (q.Options.Any()) {
+                                            <ul class="list-unstyled mb-0">
+                                                @foreach (var o in q.Options.Take(2)) {
+                                                    <li>
+                                                        <small>@o.Text</small>
+                                                        <span class="badge badge-light ml-1">@o.Points pts</span>
+                                                    </li>
+                                                }
+                                                @if (q.Options.Count > 2) {
+                                                    <li><small class="text-muted">+@(q.Options.Count - 2) more...</small></li>
+                                                }
+                                            </ul>
+                                        } else {
+                                            <em class="text-muted">No options</em>
+                                        }
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge badge-@(q.IsActive ? "success" : "secondary")">
+                                        @(q.IsActive ? "Active" : "Inactive")
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="quality-score" data-question-id="@q.Id">
+                                        <span class="text-muted">Checking...</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a class="btn btn-sm btn-outline-primary" href="@Url.Action("EditQuestion", "Admin", new { id = q.Id })" title="Edit">
+                                            Edit
+                                        </a>
+                                        <button class="btn btn-sm btn-outline-info validate-btn" data-question-id="@q.Id" title="Validate">
+                                            Validate
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-warning optimize-btn" data-question-id="@q.Id" title="Optimize Points">
+                                            Optimize
+                                        </button>
+                                        <form method="post" action="@Url.Action("DeleteQuestion", "Admin")" style="display:inline;" onsubmit="return confirm('Delete this question and all its options?');">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@q.Id" />
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">                                            Delete</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Question Choice Modal -->
+<div class="modal fade" id="addQuestionChoiceModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">How would you like to add a question?</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="fas fa-edit"></i> Classic
+                                </h6>
+                                <p class="card-text text-muted">Write the question and choices yourself</p>
+                                <button type="button" class="btn btn-outline-primary btn-block" onclick="window.location.href='@Url.Action("EditQuestion", "Admin")';">
+                                    Choose Classic
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100 border-primary">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="fas fa-magic"></i> AI Generate
+                                </h6>
+                                <p class="card-text text-muted">Generate questions using AI based on a job description</p>
+                                <button type="button" class="btn btn-primary btn-block" onclick="showAIGenerationForm();">
+                                    Choose AI Generate
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- AI Generation Form (hidden by default) -->
+                <div id="aiGenerationForm" style="display:none; margin-top:20px;">
+                    <hr>
+                    <h6>Generate Questions with AI</h6>
+                    <div class="form-group">
+                        <label>Desired Position Title <span class="text-danger">*</span></label>
+                        <input type="text" id="batchJobTitle" class="form-control" placeholder="e.g., Senior Backend Engineer" />
+                        <small class="form-text text-muted">This title is used to tailor the generated questions.</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Job Description <span class="text-danger">*</span></label>
+                        <textarea id="batchJobDescription" class="form-control" rows="4" placeholder="Paste job description here..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Number of Questions</label>
+                        <input type="number" id="batchCount" class="form-control" value="10" min="1" max="20" />
+                    </div>
+                    <div class="form-group">
+                        <label>Question Types</label>
+                        <div class="checkbox">
+                            <label><input type="checkbox" value="technical" checked> Technical</label>
+                        </div>
+                        <div class="checkbox">
+                            <label><input type="checkbox" value="behavioral" checked> Behavioral</label>
+                        </div>
+                        <div class="checkbox">
+                            <label><input type="checkbox" value="situational"> Situational</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="form-check">
+                            <input type="checkbox" id="createNewPosition" class="form-check-input" />
+                            <label class="form-check-label" for="createNewPosition">
+                                Create as a new job position
+                            </label>
+                        </div>
+                    </div>
+                    <div id="newPositionFields" style="display:none;" class="border-top pt-3">
+                        <h6>New Position Details</h6>
+                        <div class="form-group">
+                            <label>Position Title</label>
+                            <input type="text" id="newPositionTitle" class="form-control" placeholder="e.g., Senior Backend Engineer" />
+                        </div>
+                        <div class="form-group">
+                            <label>Position Description</label>
+                            <textarea id="newPositionDescription" class="form-control" rows="3" placeholder="Brief description for the position listing"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Department</label>
+                            <select id="newPositionDepartment" class="form-control">
+                                <option value="">-- Select Department --</option>
+                            </select>
+                        </div>
+                    </div>
+                    <small class="form-text text-muted">Position title and description are used to tailor generated questions.</small>
+                    
+                    <!-- Results Panel for Generated Questions -->
+                    <div id="batchGenerationResults" style="display:none; margin-top:20px;">
+                        <h6>Generated Questions</h6>
+                        <div id="batchQuestionsList"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="executeBatchGenerate" style="display:none;">Generate Questions</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Validation Results Modal -->
+<div class="modal fade" id="validationModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Question Validation Results</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body" id="validationResults">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.options-preview ul {
+    max-height: 60px;
+    overflow-y: auto;
+}
+
+.quality-score {
+    min-width: 80px;
+}
+
+.btn-group .btn {
+    padding: 0.25rem 0.5rem;
+}
+
+.question-row {
+    transition: background-color 0.2s ease;
+}
+
+.question-row:hover {
+    background-color: #f8f9fa;
+}
+
+.highlight {
+    background-color: #fff3cd !important;
+    transition: background-color 0.5s ease;
+}
+</style>
+
+@section Scripts {
+<script>
+$(document).ready(function() {
+    // Check MCP connection
+    checkMCPConnection();
+
+    // Pre-load departments for new position dropdown
+    loadDepartments();
+
+    // Search functionality
+    $('#searchQuestions').on('input', filterQuestions);
+    $('#filterType').change(filterQuestions);
+    $('#filterStatus').change(filterQuestions);
+    $('#clearFilters').click(clearFilters);
+
+    // Validation buttons
+    $('.validate-btn').click(function() {
+        var questionId = $(this).data('question-id');
+        validateSingleQuestion(questionId);
+    });
+
+    // Optimize points buttons
+    $('.optimize-btn').click(function() {
+        var questionId = $(this).data('question-id');
+        optimizeQuestionPoints(questionId);
+    });
+
+    // Toggle new position fields
+    $('#createNewPosition').change(function() {
+        if ($(this).is(':checked')) {
+            $('#newPositionFields').show();
+            // Auto-populate position title from job title
+            var jobTitle = $('#batchJobTitle').val();
+            if (jobTitle) {
+                $('#newPositionTitle').val(jobTitle);
+            }
+        } else {
+            $('#newPositionFields').hide();
+        }
+    });
+
+    // Load departments for dropdown
+    function loadDepartments() {
+        $.ajax({
+            url: '@Url.Action("GetDepartments", "Admin")',
+            type: 'GET',
+            success: function(response) {
+                if (response.success) {
+                    var select = $('#newPositionDepartment');
+                    select.empty().append('<option value="">-- Select Department --</option>');
+                    response.departments.forEach(function(dept) {
+                        select.append('<option value="' + dept + '">' + dept + '</option>');
+                    });
+                }
+            },
+            error: function() {
+                console.error('Failed to load departments');
+            }
+        });
+    }
+
+    // Auto-sync position title with job title when typing
+    $('#batchJobTitle').on('input', function() {
+        if ($('#createNewPosition').is(':checked')) {
+            $('#newPositionTitle').val($(this).val());
+        }
+    });
+
+    // Show AI generation form
+    window.showAIGenerationForm = function() {
+        $('.card').hide(); // Hide choice cards
+        $('#aiGenerationForm').show();
+        $('#executeBatchGenerate').show();
+    };
+
+    // Store generated questions globally for action functions
+    var generatedQuestions = [];
+
+    function addGeneratedQuestionsToBank() {
+        if (!generatedQuestions.length) {
+            alert('No questions to add. Please generate questions first.');
+            return;
+        }
+        
+        // TODO: Implement server endpoint to save generated questions to the bank
+        alert('Feature coming soon: Questions will be added to the question bank.');
+    }
+
+    function createPositionAndAddQuestions() {
+        var positionTitle = $('#newPositionTitle').val();
+        var positionDescription = $('#newPositionDescription').val();
+        var positionDepartment = $('#newPositionDepartment').val();
+        
+        if (!positionTitle || !positionDescription) {
+            alert('Please fill in the new position details.');
+            return;
+        }
+        
+        if (!generatedQuestions.length) {
+            alert('No questions to add. Please generate questions first.');
+            return;
+        }
+        
+        // TODO: Implement server endpoint to create position and assign questions
+        alert('Feature coming soon: New position will be created and questions assigned.');
+    }
+
+    // Batch operations
+    $('#executeBatchGenerate').click(function() {
+        executeBatchGeneration();
+    });
+
+    $('#validateAll').click(function() {
+        validateAllQuestions();
+    });
+
+    $('#optimizePoints').click(function() {
+        optimizeAllPoints();
+    });
+
+    $('#exportQuestions').click(function() {
+        exportQuestionBank();
+    });
+
+    // Functions
+    function checkMCPConnection() {
+        $.ajax({
+            url: '@Url.Action("TestMCPConnection", "Admin")',
+            type: 'GET',
+            success: function(response) {
+                if (response.success && response.connected) {
+                    $('#mcpStatus').removeClass('alert-warning').addClass('alert-success')
+                        .html('<strong>MCP Connected:</strong> AI features available');
+                } else {
+                    $('#mcpStatus').removeClass('alert-info').addClass('alert-warning')
+                        .html('<strong>MCP Not Available:</strong> Some AI features may be limited');
+                }
+            },
+            error: function() {
+                $('#mcpStatus').removeClass('alert-info').addClass('alert-danger')
+                    .html('<strong>MCP Error:</strong> Unable to connect to MCP server');
+            }
+        });
+    }
+
+    function filterQuestions() {
+        var searchTerm = $('#searchQuestions').val().toLowerCase();
+        var typeFilter = $('#filterType').val();
+        var statusFilter = $('#filterStatus').val();
+
+        $('#questionsTable tbody tr').each(function() {
+            var row = $(this);
+            var questionText = row.find('td:first').text().toLowerCase();
+            var questionType = row.data('question-type');
+            var isActive = row.find('.badge-success').length > 0;
+
+            var matchesSearch = questionText.includes(searchTerm);
+            var matchesType = !typeFilter || questionType === typeFilter;
+            var matchesStatus = !statusFilter || 
+                (statusFilter === 'active' && isActive) || 
+                (statusFilter === 'inactive' && !isActive);
+
+            row.toggle(matchesSearch && matchesType && matchesStatus);
+        });
+    }
+
+    function clearFilters() {
+        $('#searchQuestions').val('');
+        $('#filterType').val('');
+        $('#filterStatus').val('');
+        filterQuestions();
+    }
+
+    function validateSingleQuestion(questionId) {
+        var row = $('tr[data-question-id="' + questionId + '"]');
+        var questionText = row.data('question-text');
+        var questionType = row.data('question-type');
+
+        $.ajax({
+            url: '@Url.Action("ValidateQuestion", "Admin")',
+            type: 'POST',
+            data: {
+                question: questionText,
+                questionType: questionType
+            },
+            success: function(response) {
+                if (response.success) {
+                    updateQualityScore(questionId, response.validation.clarityScore);
+                    displayValidationResults(response.validation, response.recommendations);
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Error validating question');
+            }
+        });
+    }
+
+    function validateAllQuestions() {
+        $('#questionsTable tbody tr').each(function() {
+            var questionId = $(this).data('question-id');
+            validateSingleQuestion(questionId);
+        });
+    }
+
+    function optimizeQuestionPoints(questionId) {
+        var row = $('tr[data-question-id="' + questionId + '"]');
+        var questionText = row.data('question-text');
+        var options = [];
+        
+        row.find('.options-preview li').each(function() {
+            var text = $(this).find('small').first().text();
+            if (text && !text.includes('more')) {
+                options.push(text);
+            }
+        });
+
+        if (options.length === 0) {
+            alert('This question has no options to optimize');
+            return;
+        }
+
+        $.ajax({
+            url: '@Url.Action("SuggestPoints", "Admin")',
+            type: 'POST',
+            data: {
+                question: questionText,
+                options: options,
+                difficulty: 'intermediate'
+            },
+            success: function(response) {
+                if (response.success) {
+                    alert('Point suggestions calculated. Please edit the question to apply them.');
+                    row.addClass('highlight');
+                    setTimeout(() => row.removeClass('highlight'), 2000);
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Error optimizing points');
+            }
+        });
+    }
+
+    function optimizeAllPoints() {
+        if (confirm('This will analyze all questions with options. Continue?')) {
+            $('#questionsTable tbody tr').each(function() {
+                var questionId = $(this).data('question-id');
+                optimizeQuestionPoints(questionId);
+            });
+        }
+    }
+
+    function updateQualityScore(questionId, score) {
+        var scoreElement = $('.quality-score[data-question-id="' + questionId + '"]');
+        var badgeClass = score >= 8 ? 'success' : score >= 6 ? 'warning' : 'danger';
+        scoreElement.html('<span class="badge badge-' + badgeClass + '">' + score + '/10</span>');
+    }
+
+    function displayValidationResults(validation, recommendations) {
+        var html = '<div class="alert ' + (validation.isValid ? 'alert-success' : 'alert-warning') + '">';
+        html += '<h6>Validation Status: ' + (validation.isValid ? 'Valid' : 'Issues Found') + '</h6>';
+        html += '<p>Clarity Score: ' + validation.clarityScore + '/10</p>';
+        
+        if (validation.warnings.length > 0) {
+            html += '<h6>Warnings:</h6><ul>';
+            validation.warnings.forEach(function(warning) {
+                html += '<li>' + warning + '</li>';
+            });
+            html += '</ul>';
+        }
+        
+        if (validation.suggestions.length > 0) {
+            html += '<h6>Suggestions:</h6><ul>';
+            validation.suggestions.forEach(function(suggestion) {
+                html += '<li>' + suggestion + '</li>';
+            });
+            html += '</ul>';
+        }
+        
+        html += '</div>';
+        
+        $('#validationResults').html(html);
+        $('#validationModal').modal('show');
+    }
+
+    function executeBatchGeneration() {
+        var jobTitle = $('#batchJobTitle').val();
+        var jobDescription = $('#batchJobDescription').val();
+        var count = parseInt($('#batchCount').val()) || 10;
+        var questionTypes = [];
+
+        $('input[type="checkbox"]:checked').each(function() {
+            questionTypes.push($(this).val());
+        });
+
+        // Allow stub generation even without title/description (for DEV_STUB_MCP)
+        if (!jobTitle && !jobDescription) {
+            // Proceed anyway; server-side stub will generate
+        } else {
+            if (!jobTitle) {
+                alert('Please enter a desired position title.');
+                return;
+            }
+            if (!jobDescription) {
+                alert('Please provide a job description.');
+                return;
+            }
+        }
+
+        $.ajax({
+            url: '@Url.Action("GenerateQuestions", "Admin")',
+            type: 'POST',
+            traditional: true,
+            data: {
+                jobTitle: jobTitle,
+                jobDescription: jobDescription,
+                experience: 'mid',
+                questionTypes: questionTypes,
+                count: count
+            },
+            success: function(response) {
+                if (response.success && response.questions && response.questions.length > 0) {
+                    // Store generated questions globally
+                    generatedQuestions = response.questions;
+                    
+                    // Render questions in the results panel with action buttons
+                    var html = '<ol>';
+                    response.questions.forEach(function(q, i) {
+                        html += '<li style="margin-bottom:10px;"><strong>' + (q.text || q.question || '') + '</strong>';
+                        if (q.options && q.options.length > 0) {
+                            html += '<ul>';
+                            q.options.forEach(function(opt) {
+                                html += '<li>' + (opt.text || opt) + '</li>';
+                            });
+                            html += '</ul>';
+                        }
+                        html += '</li>';
+                    });
+                    html += '</ol>';
+                    
+                    // Add action buttons
+                    var createNewPos = $('#createNewPosition').is(':checked');
+                    var actionButtons = '<div class="mt-3">';
+                    actionButtons += '<button type="button" class="btn btn-success mr-2" onclick="addGeneratedQuestionsToBank()">Add to Question Bank</button>';
+                    if (createNewPos) {
+                        actionButtons += '<button type="button" class="btn btn-primary" onclick="createPositionAndAddQuestions()">Create Position & Add Questions</button>';
+                    }
+                    actionButtons += '</div>';
+                    
+                    $('#batchQuestionsList').html(html + actionButtons);
+                    $('#batchGenerationResults').show();
+                } else {
+                    $('#batchQuestionsList').html('<div class="alert alert-warning">No questions generated. Try again or check your input.</div>');
+                    $('#batchGenerationResults').show();
+                }
+            },
+            error: function() {
+                alert('Error generating questions');
+            }
+        });
+    }
+
+    function exportQuestionBank() {
+        var questions = [];
+        $('#questionsTable tbody tr').each(function() {
+            var row = $(this);
+            questions.push({
+                id: row.data('question-id'),
+                text: row.data('question-text'),
+                type: row.data('question-type')
+            });
+        });
+
+        var dataStr = JSON.stringify(questions, null, 2);
+        var dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+        
+        var exportFileDefaultName = 'question-bank-' + new Date().toISOString().slice(0,10) + '.json';
+        
+        var linkElement = document.createElement('a');
+        linkElement.setAttribute('href', dataUri);
+        linkElement.setAttribute('download', exportFileDefaultName);
+        linkElement.click();
+    }
+});
+</script>
+}

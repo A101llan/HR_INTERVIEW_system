@@ -34,23 +34,8 @@ namespace HR.Web.Controllers
             var user = _uow.Users.GetAll().FirstOrDefault(u => u.UserName == username);
             if (user == null)
             {
-                // Fallback: If trying to login as default demo users, create them if they don't exist
-                if (string.Equals(username, "admin", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(username, "hr", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(username, "client", StringComparison.OrdinalIgnoreCase))
-                {
-                    var defaultRole = string.Equals(username, "admin", StringComparison.OrdinalIgnoreCase) ? "Admin" :
-                                      string.Equals(username, "hr", StringComparison.OrdinalIgnoreCase) ? "HR" : "Client";
-                    var email = username.ToLower() + "@test.com";
-                    user = new User { UserName = username, Email = email, Role = defaultRole };
-                    _uow.Users.Add(user);
-                    _uow.Complete();
-                }
-                else
-                {
-                    ModelState.AddModelError("", "Invalid username. Please check your credentials.");
-                    return View();
-                }
+                ModelState.AddModelError("", "Invalid username. Please check your credentials.");
+                return View();
             }
 
             // Use the user's stored role from the database
@@ -106,6 +91,7 @@ namespace HR.Web.Controllers
                 return View(model);
             }
 
+
             // Create User entity (do not persist password for demo to avoid schema changes)
             var user = new User
             {
@@ -115,6 +101,19 @@ namespace HR.Web.Controllers
             };
             _uow.Users.Add(user);
             _uow.Complete();
+
+            // If registering as an applicant, also create Applicant record
+            if (model.Role == "Applicant" || model.Role == "Client")
+            {
+                var applicant = new Applicant
+                {
+                    FullName = model.UserName,
+                    Email = model.Email,
+                    Phone = model.Phone
+                };
+                _uow.Applicants.Add(applicant);
+                _uow.Complete();
+            }
 
             // Auto-login the newly registered user (accept any password for demo)
             var ticket = new FormsAuthenticationTicket(

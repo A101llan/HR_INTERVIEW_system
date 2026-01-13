@@ -159,17 +159,26 @@
     <Compile Include="Models\Interview.cs" />
     <Compile Include="Models\Onboarding.cs" />
     <Compile Include="Models\Question.cs" />
+    <Compile Include="Models\QuestionAdminViewModel.cs" />
     <Compile Include="Models\QuestionOption.cs" />
     <Compile Include="Models\PositionQuestion.cs" />
     <Compile Include="Models\PositionQuestionOption.cs" />
     <Compile Include="Models\ApplicationAnswer.cs" />
     <Compile Include="Models\ApplicationReviewViewModel.cs" />
+    <Compile Include="ViewModels\CandidateRankingsViewModel.cs" />
     <Compile Include="Data\HrContext.cs" />
     <Compile Include="Data\Repository.cs" />
     <Compile Include="Data\UnitOfWork.cs" />
     <Compile Include="Services\EmailService.cs" />
     <Compile Include="Services\StorageService.cs" />
     <Compile Include="Services\CandidateEvaluationService.cs" />
+    <Compile Include="Services\MCPService.cs" />
+    <Compile Include="Services\ScoringService.cs" />
+    <Compile Include="Controllers\AdminController.cs" />
+    <Compile Include="Controllers\AdminController.MCP.cs" />
+    <Compile Include="Controllers\AdminController.Scoring.cs" />
+    <Compile Include="Controllers\TestController.cs" />
+    <Compile Include="Controllers\QuestionnaireController.cs" />
     <Compile Include="Controllers\DashboardController.cs" />
     <Compile Include="Controllers\PositionsController.cs" />
     <Compile Include="Controllers\ApplicationsController.cs" />
@@ -219,23 +228,15 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+    <Content Include="Views\Admin\CandidateRankings.cshtml" />
+    <Content Include="Views\Admin\EditQuestion.cshtml" />
+    <Content Include="Views\Admin\Questions.cshtml" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <ProjectExtensions>
     <VisualStudio>
       <FlavorProperties GUID="{349c5851-65df-11da-9384-00065b846f21}">
         <WebProjectProperties>
-          <!-- Use IIS Express / built-in dev server instead of a custom server -->
-          <UseIIS>False</UseIIS>
-          <AutoAssignPort>True</AutoAssignPort>
-          <DevelopmentServerPort>58438</DevelopmentServerPort>
-          <DevelopmentServerVPath>/</DevelopmentServerVPath>
-          <IISUrl>http://localhost:62310/</IISUrl>
-          <NTLMAuthentication>False</NTLMAuthentication>
-          <!-- IMPORTANT: disable custom server so VS does NOT try to run HR.Web.dll directly -->
-          <UseCustomServer>False</UseCustomServer>
-          <CustomServerUrl>
-          </CustomServerUrl>
           <SaveServerSettingsInUserFile>True</SaveServerSettingsInUserFile>
         </WebProjectProperties>
       </FlavorProperties>

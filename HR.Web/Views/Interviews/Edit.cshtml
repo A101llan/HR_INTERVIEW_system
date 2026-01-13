@@ -1,15 +1,11 @@
 @model HR.Web.Models.Interview
+
 @{
     ViewBag.Title = "Edit Interview";
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
 <style>
-    body {
-        font-size: 0.97rem;
-        background: #f6faff;
-        min-height: 100vh;
-    }
     .card-blue {
         background: #fafdff;
         border-radius: 0.4rem;
@@ -18,6 +14,7 @@
         padding: 1.5rem;
         margin-top: 1.2rem;
     }
+
     .page-title {
         color: #0d2c4a;
         font-weight: 600;
@@ -25,71 +22,97 @@
     }
 </style>
 
-<div class="container-fluid">
+<div class="mt-4">
     <div class="card-blue">
-        <h3 class="page-title"><i class="fas fa-edit"></i> Reschedule Interview</h3>
-        @using (Html.BeginForm()) {
+        <h2 class="page-title">
+            <i class="fas fa-edit"></i> Reschedule Interview
+        </h2>
+
+        @using (Html.BeginForm())
+        {
             @Html.AntiForgeryToken()
             @Html.HiddenFor(m => m.Id)
+
             <div class="form-row">
-                <div class="form-group col-md-6">
+                <div class="form-group col-12 col-md-6">
                     @Html.LabelFor(m => m.ApplicationId, "Application")
-                    @Html.DropDownList("ApplicationId", null, "-- Select --", new { @class="form-control" })
+                    @Html.DropDownList(
+                        "ApplicationId",
+                        null,
+                        "-- Select application --",
+                        new { @class = "form-control" }
+                    )
                     @Html.ValidationMessageFor(m => m.ApplicationId)
                 </div>
-                <div class="form-group col-md-6">
+
+                <div class="form-group col-12 col-md-6">
                     @Html.LabelFor(m => m.InterviewerId, "Interviewer")
-                    @Html.DropDownList("InterviewerId", null, "-- Select --", new { @class="form-control" })
+                    @Html.DropDownList(
+                        "InterviewerId",
+                        null,
+                        "-- Select interviewer --",
+                        new { @class = "form-control" }
+                    )
                     @Html.ValidationMessageFor(m => m.InterviewerId)
                 </div>
             </div>
+
             <div class="form-row">
-                <div class="form-group col-md-6">
+                <div class="form-group col-12 col-md-6">
                     @Html.LabelFor(m => m.ScheduledAt, "Scheduled Date & Time")
-                    @Html.TextBoxFor(m => m.ScheduledAt, "{0:yyyy-MM-ddTHH:mm}", new { @class="form-control", type="datetime-local" })
+                    @Html.TextBoxFor(
+                        m => m.ScheduledAt,
+                        "{0:yyyy-MM-ddTHH:mm}",
+                        new
+                             {
+                            @class = "form-control",
+                            type = "datetime-local"
+                        }
+                    )
+                    <small class="form-text text-muted">
+                        Uses your device�s date & time picker
+                    </small>
                 </div>
-                <div class="form-group col-md-6">
-                    @Html.LabelFor(m => m.Mode, "Mode (Remote / Onsite)")
-                    @Html.TextBoxFor(m => m.Mode, new { @class="form-control" })
+
+                <div class="form-group col-12 col-md-6">
+                    @Html.LabelFor(m => m.Mode, "Mode")
+                    @Html.DropDownListFor(
+                        m => m.Mode,
+                        new SelectList(
+                            new[] { "Remote", "Onsite" },
+                            Model.Mode
+                        ),
+                        "-- Select mode --",
+                        new { @class = "form-control" }
+                    )
                 </div>
             </div>
+
             <div class="form-group">
                 @Html.LabelFor(m => m.Notes)
-                @Html.TextAreaFor(m => m.Notes, new { @class="form-control", rows=3 })
+                @Html.TextAreaFor(
+                    m => m.Notes,
+                    new
+                         {
+                        @class = "form-control",
+                        rows = 3,
+                        placeholder = "Optional notes for interviewer or candidate"
+                    }
+                )
             </div>
-            <button type="submit" class="btn btn-blue">Save</button>
-            @Html.ActionLink("Back","Index", null, new { @class = "btn btn-secondary ml-2" })
+
+            <div class="d-flex flex-column flex-md-row">
+                <button type="submit" class="btn btn-blue mb-2 mb-md-0 mr-md-2">
+                    Save
+                </button>
+
+                @Html.ActionLink(
+                    "Back",
+                    "Index",
+                    null,
+                    new { @class = "btn btn-secondary" }
+                )
+            </div>
         }
     </div>
 </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -25,6 +25,11 @@
                 @Html.ValidationMessageFor(m => m.Role)
             </div>
             <div class="form-group">
+                @Html.LabelFor(m => m.Phone)
+                @Html.TextBoxFor(m => m.Phone, new { @class = "form-control", placeholder = "Enter phone number" })
+                @Html.ValidationMessageFor(m => m.Phone)
+            </div>
+            <div class="form-group">
                 @Html.LabelFor(m => m.Password)
                 @Html.PasswordFor(m => m.Password, new { @class = "form-control" })
                 @Html.ValidationMessageFor(m => m.Password)
