@@ -182,7 +182,15 @@
                         <h4>@positionGroup.Key.Title</h4>
                         <small style="color: #666;">@positionGroup.Key.Department?.Name</small>
                     </div>
-                    <span class="position-badge">@positionGroup.Value.Count applicant@(positionGroup.Value.Count != 1 ? "s" : "")</span>
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <span class="position-badge">@positionGroup.Value.Count applicant@(positionGroup.Value.Count != 1 ? "s" : "")</span>
+                        @if (positionGroup.Value.Count > 5)
+                        {
+                            <button type="button" class="btn btn-sm btn-warning" onclick="evaluateCandidatesForPosition(@positionGroup.Key.Id, 10)">
+                                <i class="fas fa-robot"></i> AI Evaluate Top 10
+                            </button>
+                        }
+                    </div>
                 </div>
 
                 <div class="candidates-list position-candidates">
@@ -267,6 +275,123 @@
             nextRow.style.display = isVisible ? 'none' : 'block';
             element.style.background = isVisible ? '' : '#f0f7ff';
         }
+    }
+
+    function evaluateCandidatesForPosition(positionId, targetCount) {
+        if (!confirm('Evaluate candidates using AI? This will analyze answers for plagiarism, fluency, spelling, completeness, and quality to recommend the top ' + targetCount + ' candidates.')) {
+            return;
+        }
+
+        // Show loading state
+        var button = event.target;
+        var originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Evaluating...';
+        button.disabled = true;
+
+        $.ajax({
+            url: '@Url.Action("EvaluateCandidates", "Admin")',
+            type: 'POST',
+            data: {
+                positionId: positionId,
+                targetCount: targetCount
+            },
+            success: function(response) {
+                if (response.success) {
+                    // Create modal to show evaluation results
+                    showEvaluationResults(response);
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Error evaluating candidates');
+            },
+            complete: function() {
+                // Restore button state
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        });
+    }
+
+    function showEvaluationResults(response) {
+        var modal = $('<div class="modal fade" id="evaluationResultsModal" tabindex="-1">' +
+            '<div class="modal-dialog modal-lg">' +
+                '<div class="modal-content">' +
+                    '<div class="modal-header">' +
+                        '<h5 class="modal-title">AI Candidate Evaluation Results</h5>' +
+                        '<button type="button" class="close" data-dismiss="modal">&times;</button>' +
+                    '</div>' +
+                    '<div class="modal-body">' +
+                        '<div class="alert alert-info">' +
+                            '<strong>Summary:</strong> ' + response.summary.totalCandidates + ' candidates evaluated, ' + response.summary.evaluatedCandidates + ' recommended' +
+                            (response.summary.evaluationMethod ? ' (' + response.summary.evaluationMethod + ')' : '') +
+                        '</div>' +
+                        '<div class="row">' +
+                            '<div class="col-md-6">' +
+                                '<h6>Recommended Candidates</h6>' +
+                                '<div class="list-group" id="recommendedCandidates"></div>' +
+                            '</div>' +
+                            '<div class="col-md-6">' +
+                                '<h6>Key Findings</h6>' +
+                                '<ul id="keyFindings"></ul>' +
+                            '</div>' +
+                        '</div>' +
+                        '<h6>Recommendations</h6>' +
+                        '<ul id="recommendations"></ul>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>');
+
+        // Add modal to page
+        $('body').append(modal);
+
+        // Populate evaluation data
+        var candidatesHtml = '';
+        response.evaluations.forEach(function(eval) {
+            var statusClass = eval.recommended ? 'list-group-item-success' : 'list-group-item-light';
+            var flagHtml = eval.redFlags && eval.redFlags.length > 0 ? 
+                '<span class="badge badge-danger ml-2">' + eval.redFlags.length + ' flags</span>' : '';
+            candidatesHtml += '<div class="list-group-item ' + statusClass + '">' +
+                '<div class="d-flex justify-content-between align-items-center">' +
+                    '<div>' +
+                        '<strong>' + eval.candidateName + '</strong><br>' +
+                        '<small class="text-muted">' + eval.candidateEmail + '</small>' +
+                    '</div>' +
+                    '<div class="text-right">' +
+                        '<span class="badge badge-primary">' + eval.totalScore.toFixed(1) + ' pts</span>' +
+                        flagHtml +
+                    '</div>' +
+                '</div>' +
+                (eval.reasoning ? '<div class="mt-2"><small><strong>AI Reasoning:</strong> ' + eval.reasoning + '</small></div>' : '') +
+            '</div>';
+        });
+        $('#recommendedCandidates').html(candidatesHtml);
+
+        var findingsHtml = '';
+        if (response.summary.keyFindings) {
+            response.summary.keyFindings.forEach(function(finding) {
+                findingsHtml += '<li>' + finding + '</li>';
+            });
+        }
+        $('#keyFindings').html(findingsHtml);
+
+        var recommendationsHtml = '';
+        if (response.recommendations) {
+            response.recommendations.forEach(function(rec) {
+                recommendationsHtml += '<li>' + rec + '</li>';
+            });
+        }
+        $('#recommendations').html(recommendationsHtml);
+
+        // Show modal
+        $('#evaluationResultsModal').modal('show');
+
+        // Clean up on modal hide
+        $('#evaluationResultsModal').on('hidden.bs.modal', function () {
+            $(this).remove();
+        });
     }
 
     // Auto-expand first position

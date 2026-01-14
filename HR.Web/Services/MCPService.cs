@@ -91,9 +91,10 @@ namespace HR.Web.Services
                                 totalPoints = 10,
                                 suggestions = new List<PointSuggestion>
                                 {
-                                    new PointSuggestion{ option = "AWS", suggestedPoints = 5, reasoning = "High relevance"},
-                                    new PointSuggestion{ option = "Azure", suggestedPoints = 3, reasoning = "Relevant"},
-                                    new PointSuggestion{ option = "On-Prem", suggestedPoints = 2, reasoning = "Less relevant"}
+                                    new PointSuggestion{ option = "Option A", suggestedPoints = 4, reasoning = "Good answer"},
+                                    new PointSuggestion{ option = "Option B", suggestedPoints = 3, reasoning = "Acceptable answer"},
+                                    new PointSuggestion{ option = "Option C", suggestedPoints = 2, reasoning = "Less relevant"},
+                                    new PointSuggestion{ option = "Option D", suggestedPoints = 1, reasoning = "Poor answer"}
                                 }
                             };
                             return BuildToolSuccess(ptsPayload);

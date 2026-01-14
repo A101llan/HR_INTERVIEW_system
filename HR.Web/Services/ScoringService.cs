@@ -87,9 +87,9 @@ namespace HR.Web.Services
         }
 
         /// <summary>
-        /// Calculate score for choice questions
+        /// Calculate score for choice questions (existing logic - now fallback)
         /// </summary>
-        private decimal CalculateChoiceScore(Question question, string answerText, int positionId)
+        private decimal CalculateChoiceScoreFallback(Question question, string answerText, int positionId)
         {
             // Get question options
             var options = _uow.Context.Set<HR.Web.Models.QuestionOption>()
@@ -125,10 +125,43 @@ namespace HR.Web.Services
         }
 
         /// <summary>
-        /// Calculate score for rating questions
+        /// Calculate score for rating questions with AI enhancement
         /// </summary>
         private decimal CalculateRatingScore(Question question, string answerText)
         {
+            try
+            {
+                // Use AI to validate and contextualize rating answers
+                var parameters = new
+                {
+                    questionText = question.Text,
+                    ratingValue = answerText,
+                    questionType = "rating",
+                    maxPoints = 10,
+                    context = "1-5 scale" // Inform AI about expected scale
+                };
+
+                var callTask = _mcpService.CallToolAsync("evaluate-answer", parameters);
+                var completed = Task.WhenAny(callTask, Task.Delay(1500));
+                
+                if (completed.Result == callTask && callTask.Result.Success)
+                {
+                    var content = callTask.Result.Result.contents[0];
+                    var evaluation = JsonConvert.DeserializeObject<AnswerEvaluationResponse>(content.text);
+                    
+                    // Use AI-validated score if reasonable
+                    if (evaluation.score >= 0 && evaluation.score <= 10)
+                    {
+                        return evaluation.score;
+                    }
+                }
+            }
+            catch
+            {
+                // Fall through to existing logic
+            }
+
+            // Existing rating logic as fallback
             if (int.TryParse(answerText, out int rating))
             {
                 // Convert rating to points (1-5 scale -> 0-10 points)
@@ -139,10 +172,43 @@ namespace HR.Web.Services
         }
 
         /// <summary>
-        /// Calculate score for number questions
+        /// Calculate score for number questions with AI enhancement
         /// </summary>
         private decimal CalculateNumberScore(Question question, string answerText)
         {
+            try
+            {
+                // Use AI to validate and contextualize numeric answers
+                var parameters = new
+                {
+                    questionText = question.Text,
+                    numericValue = answerText,
+                    questionType = "number",
+                    maxPoints = 10,
+                    context = ExtractQuestionContext(question.Text)
+                };
+
+                var callTask = _mcpService.CallToolAsync("evaluate-answer", parameters);
+                var completed = Task.WhenAny(callTask, Task.Delay(1500));
+                
+                if (completed.Result == callTask && callTask.Result.Success)
+                {
+                    var content = callTask.Result.Result.contents[0];
+                    var evaluation = JsonConvert.DeserializeObject<AnswerEvaluationResponse>(content.text);
+                    
+                    // Use AI-validated score if reasonable
+                    if (evaluation.score >= 0 && evaluation.score <= 10)
+                    {
+                        return evaluation.score;
+                    }
+                }
+            }
+            catch
+            {
+                // Fall through to existing logic
+            }
+
+            // Existing number logic as fallback
             if (decimal.TryParse(answerText, out decimal number))
             {
                 // For years of experience: 0-10 points based on experience level
@@ -159,45 +225,182 @@ namespace HR.Web.Services
         }
 
         /// <summary>
+        /// Extract context from question text for AI evaluation
+        /// </summary>
+        private string ExtractQuestionContext(string questionText)
+        {
+            var lowerText = questionText.ToLower();
+            
+            if (lowerText.Contains("year") && lowerText.Contains("experience"))
+                return "years of experience";
+            if (lowerText.Contains("salary") || lowerText.Contains("compensation"))
+                return "salary expectation";
+            if (lowerText.Contains("team") || lowerText.Contains("manage"))
+                return "team size";
+            if (lowerText.Contains("hour") || lowerText.Contains("week"))
+                return "time availability";
+            
+            return "general numeric response";
+        }
+
+        /// <summary>
         /// Calculate score for text questions using AI analysis
         /// </summary>
         private decimal CalculateTextScore(Question question, string answerText)
         {
-            // Basic scoring based on answer quality
+            try
+            {
+                // Use AI to evaluate text answers for quality, relevance, and completeness
+                var parameters = new
+                {
+                    questionText = question.Text,
+                    answerText = answerText,
+                    questionType = "text",
+                    maxPoints = 10, // Standardize to 10 points like other question types
+                    evaluationCriteria = new[] { "relevance", "completeness", "quality", "fluency", "grammar" }
+                };
+
+                // Call AI service with timeout
+                var callTask = _mcpService.CallToolAsync("evaluate-answer", parameters);
+                var completed = Task.WhenAny(callTask, Task.Delay(3000)); // 3 second timeout
+                
+                if (completed.Result == callTask && callTask.Result.Success)
+                {
+                    var content = callTask.Result.Result.contents[0];
+                    var evaluation = JsonConvert.DeserializeObject<AnswerEvaluationResponse>(content.text);
+                    
+                    // Return AI-calculated score (0-10 scale)
+                    return Math.Max(0, Math.Min(10, evaluation.score));
+                }
+                else
+                {
+                    // Fallback to enhanced basic scoring if AI fails
+                    return CalculateBasicTextScore(question, answerText);
+                }
+            }
+            catch
+            {
+                // Fallback to basic scoring on any error
+                return CalculateBasicTextScore(question, answerText);
+            }
+        }
+
+        /// <summary>
+        /// Enhanced basic text scoring as fallback
+        /// </summary>
+        private decimal CalculateBasicTextScore(Question question, string answerText)
+        {
             var score = 0m;
 
-            // Length and completeness
-            if (answerText.Length < 20)
+            // Length and completeness (improved scale)
+            if (string.IsNullOrEmpty(answerText))
+            {
+                return 0;
+            }
+            else if (answerText.Length < 20)
             {
                 score += 1;
+            }
+            else if (answerText.Length < 50)
+            {
+                score += 2;
             }
             else if (answerText.Length < 100)
             {
                 score += 4;
             }
+            else if (answerText.Length < 200)
+            {
+                score += 6;
+            }
             else if (answerText.Length < 300)
             {
-                score += 7;
+                score += 8;
             }
             else
             {
                 score += 9;
             }
 
-            // Keywords that indicate good answers
-            var positiveKeywords = new[] { "experience", "developed", "implemented", "managed", "led", "created", "improved", "achieved" };
+            // Enhanced keyword analysis
+            var positiveKeywords = new[] { 
+                "experience", "developed", "implemented", "managed", "led", "created", 
+                "improved", "achieved", "successfully", "completed", "handled", "resolved",
+                "optimized", "designed", "coordinated", "trained", "supported"
+            };
             var keywordCount = positiveKeywords.Count(keyword => 
                 answerText.ToLower().Contains(keyword));
 
-            score += Math.Min(2, keywordCount * 0.5m);
+            score += Math.Min(3, keywordCount * 0.5m);
 
-            // Check for specific examples
-            if (answerText.ToLower().Contains("example") || answerText.ToLower().Contains("specific"))
+            // Check for specific examples (strong indicator)
+            if (answerText.ToLower().Contains("example") || 
+                answerText.ToLower().Contains("specific") ||
+                answerText.ToLower().Contains("for instance") ||
+                answerText.ToLower().Contains("such as"))
+            {
+                score += 1;
+            }
+
+            // Check for quantifiable results
+            if (System.Text.RegularExpressions.Regex.IsMatch(answerText.ToLower(), @"\d+%|\d+\s*(percent|percentage|increase|decrease|improvement|reduction)"))
             {
                 score += 1;
             }
 
             return Math.Min(10, score);
+        }
+
+        /// <summary>
+        /// Calculate score for choice questions with AI enhancement
+        /// </summary>
+        private decimal CalculateChoiceScore(Question question, string answerText, int positionId)
+        {
+            try
+            {
+                // Use AI to validate and score choice answers
+                var parameters = new
+                {
+                    questionText = question.Text,
+                    selectedAnswer = answerText,
+                    questionType = "choice",
+                    availableOptions = GetQuestionOptions(question.Id),
+                    maxPoints = 10
+                };
+
+                var callTask = _mcpService.CallToolAsync("evaluate-answer", parameters);
+                var completed = Task.WhenAny(callTask, Task.Delay(2000));
+                
+                if (completed.Result == callTask && callTask.Result.Success)
+                {
+                    var content = callTask.Result.Result.contents[0];
+                    var evaluation = JsonConvert.DeserializeObject<AnswerEvaluationResponse>(content.text);
+                    
+                    // Use AI score if available and reasonable
+                    if (evaluation.score >= 0 && evaluation.score <= 10)
+                    {
+                        return evaluation.score;
+                    }
+                }
+            }
+            catch
+            {
+                // Fall through to existing logic
+            }
+
+            // Existing choice scoring logic as fallback
+            return CalculateChoiceScoreFallback(question, answerText, positionId);
+        }
+
+        /// <summary>
+        /// Get available options for a question
+        /// </summary>
+        private List<string> GetQuestionOptions(int questionId)
+        {
+            return _uow.Context.Set<HR.Web.Models.QuestionOption>()
+                .Where(qo => qo.QuestionId == questionId)
+                .Select(qo => qo.Text)
+                .ToList();
         }
 
         /// <summary>
@@ -470,5 +673,18 @@ namespace HR.Web.Services
         public decimal AverageScore { get; set; }
         public Dictionary<string, int> ScoreDistribution { get; set; }
         public dynamic MCPAnalysis { get; set; }
+    }
+
+    // Response model for AI answer evaluation
+    public class AnswerEvaluationResponse
+    {
+        public decimal score { get; set; } // 0-10 scale
+        public string quality { get; set; } // excellent, good, fair, poor
+        public List<string> strengths { get; set; }
+        public List<string> weaknesses { get; set; }
+        public List<string> issues { get; set; } // grammar, spelling, relevance, etc.
+        public string reasoning { get; set; }
+        public bool isPlagiarized { get; set; }
+        public decimal confidence { get; set; } // AI confidence in evaluation
     }
 }

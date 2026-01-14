@@ -26,17 +26,7 @@
         </div>
         <div class="card-body">
             <div class="row">
-                <div class="col-md-4">
-                    <button id="validateAll" class="btn btn-outline-warning btn-block">
-                        Validate All Questions
-                    </button>
-                </div>
-                <div class="col-md-4">
-                    <button id="optimizePoints" class="btn btn-outline-info btn-block">
-                        Optimize Point Values
-                    </button>
-                </div>
-                <div class="col-md-4">
+                <div class="col-md-12">
                     <button id="exportQuestions" class="btn btn-outline-secondary btn-block">
                         Export Question Bank
                     </button>
@@ -82,7 +72,7 @@
     <!-- Questions Table -->
     <div class="card">
         <div class="card-header">
-            <h5>Questions (@Model.Count)</h5>
+            <h5>Sample Questions (@Model.Count)</h5>
         </div>
         <div class="card-body">
             <div class="table-responsive">
@@ -93,7 +83,6 @@
                             <th>Type</th>
                             <th>Options</th>
                             <th>Status</th>
-                            <th>Quality Score</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -133,21 +122,10 @@
                                     </span>
                                 </td>
                                 <td>
-                                    <div class="quality-score" data-question-id="@q.Id">
-                                        <span class="text-muted">Checking...</span>
-                                    </div>
-                                </td>
-                                <td>
                                     <div class="btn-group" role="group">
                                         <a class="btn btn-sm btn-outline-primary" href="@Url.Action("EditQuestion", "Admin", new { id = q.Id })" title="Edit">
                                             Edit
                                         </a>
-                                        <button class="btn btn-sm btn-outline-info validate-btn" data-question-id="@q.Id" title="Validate">
-                                            Validate
-                                        </button>
-                                        <button class="btn btn-sm btn-outline-warning optimize-btn" data-question-id="@q.Id" title="Optimize Points">
-                                            Optimize
-                                        </button>
                                         <form method="post" action="@Url.Action("DeleteQuestion", "Admin")" style="display:inline;" onsubmit="return confirm('Delete this question and all its options?');">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="id" value="@q.Id" />
@@ -262,6 +240,35 @@
                     <div id="batchGenerationResults" style="display:none; margin-top:20px;">
                         <h6>Generated Questions</h6>
                         <div id="batchQuestionsList"></div>
+                        <div class="mt-3" id="generatedQuestionsActions" style="display:none;">
+                            <!-- Add to Sample Questions -->
+                            <div class="mb-2" id="addToSampleSection">
+                                <button type="button" class="btn btn-primary" onclick="addGeneratedQuestionsToSample()"
+                                    data-bs-toggle="tooltip" data-bs-placement="top" 
+                                    title="Add these questions to the sample questions collection">
+                                    <i class="fas fa-bookmark"></i> Add to Sample Questions
+                                </button>
+                            </div>
+                            
+                            <!-- Always show Add to Question Bank -->
+                            <div class="mb-2" id="addToBankSection">
+                                <button type="button" class="btn btn-success" onclick="addGeneratedQuestionsToBank()"
+                                    data-bs-toggle="tooltip" data-bs-placement="top" 
+                                    title="Questions become available for all positions">
+                                    <i class="fas fa-plus"></i> Add to Question Bank
+                                </button>
+                            </div>
+                            
+                            <!-- Only show Create Position when checkbox is checked -->
+                            <div id="createPositionSection" style="display:none;">
+                                <button type="button" class="btn btn-primary" onclick="createPositionAndAddQuestions()">
+                                    <i class="fas fa-briefcase"></i> Create Position & Add Questions
+                                </button>
+                                <small class="form-text text-muted d-block mt-1">
+                                    Create a new position with these questions assigned
+                                </small>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -273,31 +280,10 @@
     </div>
 </div>
 
-<!-- Validation Results Modal -->
-<div class="modal fade" id="validationModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Question Validation Results</h5>
-                <button type="button" class="close" data-dismiss="modal">&times;</button>
-            </div>
-            <div class="modal-body" id="validationResults">
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <style>
 .options-preview ul {
     max-height: 60px;
     overflow-y: auto;
-}
-
-.quality-score {
-    min-width: 80px;
 }
 
 .btn-group .btn {
@@ -327,22 +313,21 @@ $(document).ready(function() {
     // Pre-load departments for new position dropdown
     loadDepartments();
 
+    // Initialize Bootstrap tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
     // Search functionality
     $('#searchQuestions').on('input', filterQuestions);
     $('#filterType').change(filterQuestions);
     $('#filterStatus').change(filterQuestions);
     $('#clearFilters').click(clearFilters);
 
-    // Validation buttons
-    $('.validate-btn').click(function() {
-        var questionId = $(this).data('question-id');
-        validateSingleQuestion(questionId);
-    });
-
-    // Optimize points buttons
-    $('.optimize-btn').click(function() {
-        var questionId = $(this).data('question-id');
-        optimizeQuestionPoints(questionId);
+    // Export questions
+    $('#exportQuestions').click(function() {
+        exportQuestionBank();
     });
 
     // Toggle new position fields
@@ -350,12 +335,15 @@ $(document).ready(function() {
         if ($(this).is(':checked')) {
             $('#newPositionFields').show();
             // Auto-populate position title from job title
-            var jobTitle = $('#batchJobTitle').val();
-            if (jobTitle) {
-                $('#newPositionTitle').val(jobTitle);
+            $('#newPositionTitle').val($('#batchJobTitle').val());
+            // Show create position section if questions are already generated
+            if ($('#generatedQuestionsActions').is(':visible')) {
+                $('#createPositionSection').show();
             }
         } else {
             $('#newPositionFields').hide();
+            // Hide create position section
+            $('#createPositionSection').hide();
         }
     });
 
@@ -402,8 +390,76 @@ $(document).ready(function() {
             return;
         }
         
-        // TODO: Implement server endpoint to save generated questions to the bank
-        alert('Feature coming soon: Questions will be added to the question bank.');
+        $.ajax({
+            url: '@Url.Action("AddGeneratedQuestionsToBank", "Admin")',
+            type: 'POST',
+            data: {
+                questionsJson: JSON.stringify(generatedQuestions)
+            },
+            success: function(response) {
+                if (response.success) {
+                    alert(response.message);
+                    // Clear the generated questions
+                    generatedQuestions = [];
+                    $('#batchGenerationResults').hide();
+                    $('#generatedQuestionsActions').hide();
+                    $('#batchQuestionsList').empty();
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Error adding questions to bank');
+            }
+        });
+    }
+
+    function addGeneratedQuestionsToSample() {
+        if (!generatedQuestions.length) {
+            alert('No questions to add. Please generate questions first.');
+            return;
+        }
+
+        // Convert generated questions to the format expected by the backend
+        var questionsToAdd = generatedQuestions.map(function(q, index) {
+            return {
+                id: index, // Use index as temporary ID
+                text: q.text || q.question || '',
+                type: q.type || 'Text',
+                isActive: true
+            };
+        });
+
+        // Call backend to check for duplicates
+        $.ajax({
+            url: '@Url.Action("AddToSampleQuestions", "Admin")',
+            type: 'POST',
+            data: {
+                questionsJson: JSON.stringify(questionsToAdd)
+            },
+            success: function(response) {
+                if (response.success) {
+                    if (response.requiresDecision) {
+                        // Show duplicate decision modal
+                        showDuplicateDecisionModal(response.duplicates, response.newQuestions);
+                    } else {
+                        // No duplicates, show success
+                        alert(response.message);
+                        // Clear the generated questions
+                        generatedQuestions = [];
+                        $('#batchGenerationResults').hide();
+                        $('#generatedQuestionsActions').hide();
+                        $('#batchQuestionsList').empty();
+                        setTimeout(() => location.reload(), 1000);
+                    }
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Error adding questions to sample collection');
+            }
+        });
     }
 
     function createPositionAndAddQuestions() {
@@ -426,21 +482,7 @@ $(document).ready(function() {
     }
 
     // Batch operations
-    $('#executeBatchGenerate').click(function() {
-        executeBatchGeneration();
-    });
-
-    $('#validateAll').click(function() {
-        validateAllQuestions();
-    });
-
-    $('#optimizePoints').click(function() {
-        optimizeAllPoints();
-    });
-
-    $('#exportQuestions').click(function() {
-        exportQuestionBank();
-    });
+    $('#executeBatchGenerate').click(executeBatchGeneration);
 
     // Functions
     function checkMCPConnection() {
@@ -491,121 +533,6 @@ $(document).ready(function() {
         filterQuestions();
     }
 
-    function validateSingleQuestion(questionId) {
-        var row = $('tr[data-question-id="' + questionId + '"]');
-        var questionText = row.data('question-text');
-        var questionType = row.data('question-type');
-
-        $.ajax({
-            url: '@Url.Action("ValidateQuestion", "Admin")',
-            type: 'POST',
-            data: {
-                question: questionText,
-                questionType: questionType
-            },
-            success: function(response) {
-                if (response.success) {
-                    updateQualityScore(questionId, response.validation.clarityScore);
-                    displayValidationResults(response.validation, response.recommendations);
-                } else {
-                    alert('Error: ' + response.message);
-                }
-            },
-            error: function() {
-                alert('Error validating question');
-            }
-        });
-    }
-
-    function validateAllQuestions() {
-        $('#questionsTable tbody tr').each(function() {
-            var questionId = $(this).data('question-id');
-            validateSingleQuestion(questionId);
-        });
-    }
-
-    function optimizeQuestionPoints(questionId) {
-        var row = $('tr[data-question-id="' + questionId + '"]');
-        var questionText = row.data('question-text');
-        var options = [];
-        
-        row.find('.options-preview li').each(function() {
-            var text = $(this).find('small').first().text();
-            if (text && !text.includes('more')) {
-                options.push(text);
-            }
-        });
-
-        if (options.length === 0) {
-            alert('This question has no options to optimize');
-            return;
-        }
-
-        $.ajax({
-            url: '@Url.Action("SuggestPoints", "Admin")',
-            type: 'POST',
-            data: {
-                question: questionText,
-                options: options,
-                difficulty: 'intermediate'
-            },
-            success: function(response) {
-                if (response.success) {
-                    alert('Point suggestions calculated. Please edit the question to apply them.');
-                    row.addClass('highlight');
-                    setTimeout(() => row.removeClass('highlight'), 2000);
-                } else {
-                    alert('Error: ' + response.message);
-                }
-            },
-            error: function() {
-                alert('Error optimizing points');
-            }
-        });
-    }
-
-    function optimizeAllPoints() {
-        if (confirm('This will analyze all questions with options. Continue?')) {
-            $('#questionsTable tbody tr').each(function() {
-                var questionId = $(this).data('question-id');
-                optimizeQuestionPoints(questionId);
-            });
-        }
-    }
-
-    function updateQualityScore(questionId, score) {
-        var scoreElement = $('.quality-score[data-question-id="' + questionId + '"]');
-        var badgeClass = score >= 8 ? 'success' : score >= 6 ? 'warning' : 'danger';
-        scoreElement.html('<span class="badge badge-' + badgeClass + '">' + score + '/10</span>');
-    }
-
-    function displayValidationResults(validation, recommendations) {
-        var html = '<div class="alert ' + (validation.isValid ? 'alert-success' : 'alert-warning') + '">';
-        html += '<h6>Validation Status: ' + (validation.isValid ? 'Valid' : 'Issues Found') + '</h6>';
-        html += '<p>Clarity Score: ' + validation.clarityScore + '/10</p>';
-        
-        if (validation.warnings.length > 0) {
-            html += '<h6>Warnings:</h6><ul>';
-            validation.warnings.forEach(function(warning) {
-                html += '<li>' + warning + '</li>';
-            });
-            html += '</ul>';
-        }
-        
-        if (validation.suggestions.length > 0) {
-            html += '<h6>Suggestions:</h6><ul>';
-            validation.suggestions.forEach(function(suggestion) {
-                html += '<li>' + suggestion + '</li>';
-            });
-            html += '</ul>';
-        }
-        
-        html += '</div>';
-        
-        $('#validationResults').html(html);
-        $('#validationModal').modal('show');
-    }
-
     function executeBatchGeneration() {
         var jobTitle = $('#batchJobTitle').val();
         var jobDescription = $('#batchJobDescription').val();
@@ -616,19 +543,23 @@ $(document).ready(function() {
             questionTypes.push($(this).val());
         });
 
-        // Allow stub generation even without title/description (for DEV_STUB_MCP)
-        if (!jobTitle && !jobDescription) {
-            // Proceed anyway; server-side stub will generate
-        } else {
-            if (!jobTitle) {
-                alert('Please enter a desired position title.');
-                return;
-            }
-            if (!jobDescription) {
-                alert('Please provide a job description.');
-                return;
-            }
+        // Validate required fields
+        if (!jobTitle) {
+            alert('Please enter a desired position title.');
+            return;
         }
+        if (!jobDescription) {
+            alert('Please provide a job description.');
+            return;
+        }
+
+        console.log('Sending parameters:', {
+            jobTitle: jobTitle,
+            jobDescription: jobDescription,
+            experience: 'mid',
+            questionTypes: questionTypes,
+            count: count
+        });
 
         $.ajax({
             url: '@Url.Action("GenerateQuestions", "Admin")',
@@ -642,6 +573,9 @@ $(document).ready(function() {
                 count: count
             },
             success: function(response) {
+                console.log('Received response:', response);
+                console.log('Number of questions:', response.questions ? response.questions.length : 0);
+                
                 if (response.success && response.questions && response.questions.length > 0) {
                     // Store generated questions globally
                     generatedQuestions = response.questions;
@@ -661,20 +595,21 @@ $(document).ready(function() {
                     });
                     html += '</ol>';
                     
-                    // Add action buttons
-                    var createNewPos = $('#createNewPosition').is(':checked');
-                    var actionButtons = '<div class="mt-3">';
-                    actionButtons += '<button type="button" class="btn btn-success mr-2" onclick="addGeneratedQuestionsToBank()">Add to Question Bank</button>';
-                    if (createNewPos) {
-                        actionButtons += '<button type="button" class="btn btn-primary" onclick="createPositionAndAddQuestions()">Create Position & Add Questions</button>';
-                    }
-                    actionButtons += '</div>';
-                    
-                    $('#batchQuestionsList').html(html + actionButtons);
+                    $('#batchQuestionsList').html(html);
                     $('#batchGenerationResults').show();
+                    $('#generatedQuestionsActions').show();
+                    
+                    // Show/hide create position section based on checkbox
+                    var createNewPos = $('#createNewPosition').is(':checked');
+                    if (createNewPos) {
+                        $('#createPositionSection').show();
+                    } else {
+                        $('#createPositionSection').hide();
+                    }
                 } else {
                     $('#batchQuestionsList').html('<div class="alert alert-warning">No questions generated. Try again or check your input.</div>');
                     $('#batchGenerationResults').show();
+                    $('#generatedQuestionsActions').hide();
                 }
             },
             error: function() {
@@ -703,6 +638,215 @@ $(document).ready(function() {
         linkElement.setAttribute('href', dataUri);
         linkElement.setAttribute('download', exportFileDefaultName);
         linkElement.click();
+    }
+
+    function addToSampleQuestions() {
+        var selectedQuestions = [];
+        var hasSelection = false;
+
+        // Check if any questions are selected (we'll need to add checkboxes first)
+        $('#questionsTable tbody tr').each(function() {
+            var row = $(this);
+            var checkbox = row.find('input[type="checkbox"]:checked');
+            
+            if (checkbox.length > 0) {
+                hasSelection = true;
+                selectedQuestions.push({
+                    id: row.data('question-id'),
+                    text: row.data('question-text'),
+                    type: row.data('question-type'),
+                    isActive: row.find('.badge-success').length > 0
+                });
+            }
+        });
+
+        if (!hasSelection) {
+            // If no checkboxes exist, add all visible questions
+            $('#questionsTable tbody tr:visible').each(function() {
+                var row = $(this);
+                selectedQuestions.push({
+                    id: row.data('question-id'),
+                    text: row.data('question-text'),
+                    type: row.data('question-type'),
+                    isActive: row.find('.badge-success').length > 0
+                });
+            });
+        }
+
+        if (selectedQuestions.length === 0) {
+            alert('No questions available to add to sample questions.');
+            return;
+        }
+
+        // Call backend to check for duplicates
+        $.ajax({
+            url: '@Url.Action("AddToSampleQuestions", "Admin")',
+            type: 'POST',
+            data: {
+                questionsJson: JSON.stringify(selectedQuestions)
+            },
+            success: function(response) {
+                if (response.success) {
+                    if (response.requiresDecision) {
+                        // Show duplicate decision modal
+                        showDuplicateDecisionModal(response.duplicates, response.newQuestions);
+                    } else {
+                        // No duplicates, show success
+                        alert(response.message);
+                        setTimeout(() => location.reload(), 1000);
+                    }
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Error adding questions to sample collection');
+            }
+        });
+    }
+
+    function showDuplicateDecisionModal(duplicates, newQuestions) {
+        var modalHtml = `
+            <div class="modal fade" id="duplicateDecisionModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Duplicate Questions Review</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p><strong>Found ${duplicates.length} duplicate questions. Please decide which ones to keep:</strong></p>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6>New Questions (${newQuestions.length})</h6>
+                                    <div class="list-group" style="max-height: 300px; overflow-y: auto;">
+                                        ${newQuestions.map(q => `
+                                            <div class="list-group-item">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="new_${q.questionData.id}" checked>
+                                                    <label class="form-check-label" for="new_${q.questionData.id}">
+                                                        <strong>[${q.questionData.type}]</strong> ${q.questionData.text.substring(0, 100)}${q.questionData.text.length > 100 ? '...' : ''}
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6>Duplicate Questions (${duplicates.length})</h6>
+                                    <div class="list-group" style="max-height: 300px; overflow-y: auto;">
+                                        ${duplicates.map(d => `
+                                            <div class="list-group-item">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="dup_${d.id}" data-duplicate='${JSON.stringify(d)}'>
+                                                        <label class="form-check-label" for="dup_${d.id}">
+                                                            <strong>[${d.type}]</strong> ${d.text.substring(0, 100)}${d.text.length > 100 ? '...' : ''}
+                                                            <br><small class="text-muted">Existing: ${d.existingQuestionText.substring(0, 80)}${d.existingQuestionText.length > 80 ? '...' : ''}</small>
+                                                        </label>
+                                                    </div>
+                                                    <div class="btn-group btn-group-sm">
+                                                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectDuplicateAction('${d.id}', 'keep')">Keep</button>
+                                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="selectDuplicateAction('${d.id}', 'skip')">Skip</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-primary" onclick="processDuplicateDecisions(${newQuestions.length}, ${duplicates.length})">
+                                Process Decisions
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Remove existing modal if any
+        $('#duplicateDecisionModal').remove();
+        
+        // Add new modal to body
+        $('body').append(modalHtml);
+        
+        // Show modal
+        var modal = new bootstrap.Modal(document.getElementById('duplicateDecisionModal'));
+        modal.show();
+
+        // Clean up on modal hide
+        $('#duplicateDecisionModal').on('hidden.bs.modal', function () {
+            $(this).remove();
+        });
+    }
+
+    function selectDuplicateAction(duplicateId, action) {
+        var checkbox = $(`#dup_${duplicateId}`);
+        checkbox.data('action', action);
+        
+        // Update button styles
+        var parent = checkbox.closest('.list-group-item');
+        parent.find('.btn-outline-primary').toggleClass('btn-outline-primary btn-primary', action === 'keep');
+        parent.find('.btn-outline-secondary').toggleClass('btn-outline-secondary btn-secondary', action === 'skip');
+    }
+
+    function processDuplicateDecisions(newCount, duplicateCount) {
+        var decisions = [];
+        
+        // Add all new questions (they're checked by default)
+        for (let i = 0; i < newCount; i++) {
+            // These will be processed automatically
+        }
+        
+        // Process duplicate decisions
+        $('#duplicateDecisionModal input[data-duplicate]').each(function() {
+            var $this = $(this);
+            var duplicateData = JSON.parse($this.data('duplicate'));
+            var action = $this.data('action') || ($this.is(':checked') ? 'keep' : 'skip');
+            
+            decisions.push({
+                id: duplicateData.id,
+                newText: duplicateData.text,
+                type: duplicateData.type,
+                action: action,
+                existingQuestionId: duplicateData.existingQuestionId
+            });
+        });
+
+        if (decisions.length === 0) {
+            alert('Please make decisions for duplicate questions.');
+            return;
+        }
+
+        // Send decisions to backend
+        $.ajax({
+            url: '@Url.Action("ProcessDuplicateDecisions", "Admin")',
+            type: 'POST',
+            data: {
+                decisionsJson: JSON.stringify(decisions)
+            },
+            success: function(response) {
+                if (response.success) {
+                    $('#duplicateDecisionModal').modal('hide');
+                    alert(response.message);
+                    // Clear the generated questions
+                    generatedQuestions = [];
+                    $('#batchGenerationResults').hide();
+                    $('#generatedQuestionsActions').hide();
+                    $('#batchQuestionsList').empty();
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Error processing duplicate decisions');
+            }
+        });
     }
 });
 </script>
