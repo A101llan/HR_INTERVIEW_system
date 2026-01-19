@@ -44,6 +44,14 @@
             .OrderByDescending(a => a.AppliedOn)
             .FirstOrDefault();
     };
+
+    Func<HR.Web.Models.Applicant, HR.Web.Models.Application> getLatestApp = (applicant) => {
+        if (applicant.Applications == null || !applicant.Applications.Any())
+            return null;
+        return applicant.Applications
+            .OrderByDescending(a => a.AppliedOn)
+            .FirstOrDefault();
+    };
 }
 
 <div class="mt-4">
@@ -87,6 +95,7 @@
                 @foreach (var item in Model)
                 {
                     var latestApp = getLatestUninterviewedApp(item);
+                    var latestAppForHold = getLatestApp(item);
                 <tr data-proficiency="@getProficiencyValue(item)">
                     <td>@item.FullName</td>
                     <td class="d-none d-md-table-cell">@item.Email</td>
@@ -99,14 +108,14 @@
                                 <i class="fas fa-user"></i> View
                             </a>
 
-                            @if (latestApp != null)
+                            @if (latestAppForHold != null)
                             {
-                                if (latestApp.Status != "On Hold")
+                                if (latestAppForHold.Status != "On Hold")
                                 {
                                     using (Html.BeginForm("PutOnHold", "Applications", FormMethod.Post))
                                     {
                                         @Html.AntiForgeryToken()
-                                        @Html.Hidden("applicationId", latestApp.Id)
+                                        @Html.Hidden("applicationId", latestAppForHold.Id)
                                         <button type="submit"
                                                 class="btn btn-sm btn-warning mb-1 mb-md-0 mr-md-1">
                                             Put On Hold
@@ -118,7 +127,7 @@
                                     using (Html.BeginForm("ReleaseHold", "Applications", FormMethod.Post))
                                     {
                                         @Html.AntiForgeryToken()
-                                        @Html.Hidden("applicationId", latestApp.Id)
+                                        @Html.Hidden("applicationId", latestAppForHold.Id)
                                         <button type="submit"
                                                 class="btn btn-sm btn-primary mb-1 mb-md-0 mr-md-1">
                                             Release Hold
